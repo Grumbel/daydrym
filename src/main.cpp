@@ -35,14 +35,19 @@ static const char* stereo_mode_name(StereoMode m) {
 }
 
 static bool g_running = true;
+#if defined(__ANDROID__)
+static StereoMode g_stereo = StereoMode::SideBySide; // phone VR default
+#else
 static StereoMode g_stereo = StereoMode::Mono;
+#endif
 
 static void handle_event(const SDL_Event& e, Scene& scene) {
-  if (e.type == SDL_QUIT) {
+  if (e.type == SDL_QUIT || e.type == SDL_APP_TERMINATING) {
     g_running = false;
   } else if (e.type == SDL_KEYDOWN) {
     switch (e.key.keysym.sym) {
       case SDLK_ESCAPE:
+      case SDLK_AC_BACK:
         g_running = false;
         break;
       case SDLK_v: {
@@ -55,20 +60,29 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
         break;
     }
   } else if (e.type == SDL_MOUSEMOTION && (SDL_GetRelativeMouseMode() == SDL_TRUE)) {
+#if !defined(__ANDROID__)
     const float sens = 0.0025f;
     scene.cam_yaw   += e.motion.xrel * sens;
     scene.cam_pitch -= e.motion.yrel * sens;
     const float lim = 1.4f;
     if (scene.cam_pitch >  lim) scene.cam_pitch = lim;
     if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
+#else
+    (void)scene;
+#endif
+  } else if (e.type == SDL_FINGERDOWN || e.type == SDL_MOUSEBUTTONDOWN) {
+    // Tap cycles stereo mode on touch devices
+#if defined(__ANDROID__)
+    int next = (static_cast<int>(g_stereo) + 1) % static_cast<int>(StereoMode::Count);
+    g_stereo = static_cast<StereoMode>(next);
+    std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
+#else
+    (void)e;
+#endif
   }
 }
 
 static Mat4 eye_translate(float sep_sign, float eye_sep) {
-  // Positive sep_sign shifts camera toward +X (right); for left eye use +0.5 * sep
-  // Convention: left eye is at -eye_sep/2 in camera space after view, approximated
-  // by translating world opposite before view: +offset for left when looking -Z...
-  // We apply a simple horizontal offset in view space via a pre-view translation.
   return Mat4::translate({sep_sign * eye_sep * 0.5f, 0.f, 0.f});
 }
 
@@ -77,12 +91,53 @@ static void render_eye(Renderer& renderer, Scene& scene,
   scene.draw(renderer, view, proj);
 }
 
+#if defined(__ANDROID__)
+// Apply device orientation (rotation vector / accel+gyro fusion via SDL)
+static void update_camera_from_sensors(Scene& scene) {
+  int count = SDL_NumSensors();
+  for (int i = 0; i < count; ++i) {
+    SDL_SensorType type = SDL_SensorGetDeviceType(i);
+    if (type != SDL_SENSOR_ACCEL && type != SDL_SENSOR_GYRO)
+      continue;
+    SDL_Sensor* s = SDL_SensorOpen(i);
+    (void)s;
+  }
+
+  // Prefer accelerometer tilt for pitch + simple gyro integration is heavy;
+  // use accel for pitch/roll-style look suitable for a cardboard viewer held in landscape.
+  for (int i = 0; i < count; ++i) {
+    if (SDL_SensorGetDeviceType(i) != SDL_SENSOR_ACCEL)
+      continue;
+    SDL_Sensor* accel = SDL_SensorFromInstanceID(SDL_SensorGetDeviceInstanceID(i));
+    if (!accel) {
+      accel = SDL_SensorOpen(i);
+    }
+    if (!accel) continue;
+    float data[3] = {0, 0, 0};
+    if (SDL_SensorGetData(accel, data, 3) == 0) {
+      // Landscape: x along device long edge roughly; map gravity to look angles
+      float ax = data[0], ay = data[1], az = data[2];
+      // Pitch from forward tilt, yaw from side tilt (viewer resting on face)
+      scene.cam_pitch = std::atan2(-az, std::sqrt(ax * ax + ay * ay));
+      scene.cam_yaw   = std::atan2(ax, ay);
+      const float lim = 1.4f;
+      if (scene.cam_pitch >  lim) scene.cam_pitch = lim;
+      if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
+    }
+    break;
+  }
+}
+#endif
+
 int main(int argc, char** argv) {
   (void)argc; (void)argv;
 
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
-    std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
-    return 1;
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_SENSOR) != 0) {
+    // Sensors optional
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+      std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+      return 1;
+    }
   }
 
 #if defined(USE_GLES) || defined(__ANDROID__)
@@ -98,11 +153,15 @@ int main(int argc, char** argv) {
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
   int win_w = 1280, win_h = 720;
+  Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+#if defined(__ANDROID__)
+  flags |= SDL_WINDOW_FULLSCREEN;
+#endif
+
   SDL_Window* window = SDL_CreateWindow(
-      "daydrym — V cycles stereo modes",
+      "daydrym",
       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-      win_w, win_h,
-      SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+      win_w, win_h, flags);
 
   if (!window) {
     std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -115,7 +174,9 @@ int main(int argc, char** argv) {
     return 1;
   }
   SDL_GL_SetSwapInterval(1);
+#if !defined(__ANDROID__)
   SDL_SetRelativeMouseMode(SDL_TRUE);
+#endif
 
   int draw_w = 0, draw_h = 0;
   SDL_GL_GetDrawableSize(window, &draw_w, &draw_h);
@@ -132,15 +193,17 @@ int main(int argc, char** argv) {
   const float eye_sep = 0.065f;
 
   std::printf("daydrym — Blinn-Phong, shadow map, textures\n");
-  std::printf("Controls: WASD move, mouse look, Space/Ctrl up/down\n");
-  std::printf("          V = cycle stereo mode, Esc = quit\n");
-  std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
+  std::printf("Stereo mode: %s (V or tap to cycle)\n", stereo_mode_name(g_stereo));
 
   while (g_running) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       handle_event(e, scene);
     }
+
+#if defined(__ANDROID__)
+    update_camera_from_sensors(scene);
+#endif
 
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
     float speed = 3.5f;
@@ -166,7 +229,6 @@ int main(int argc, char** argv) {
       renderer.resize(draw_w, draw_h);
     }
 
-    // Shadow pass (shared; mono camera is good enough for the light)
     renderer.begin_shadow_pass(scene.light, {0.f, 1.f, -2.f});
     scene.draw_shadow(renderer);
     renderer.end_shadow_pass();
@@ -174,7 +236,6 @@ int main(int argc, char** argv) {
     Mat4 view = scene.view_matrix();
     float aspect = static_cast<float>(draw_w) / static_cast<float>(draw_h > 0 ? draw_h : 1);
 
-    // Left eye = camera shifted right in world before view (sep +), right eye opposite
     Mat4 view_left  = eye_translate(+1.f, eye_sep) * view;
     Mat4 view_right = eye_translate(-1.f, eye_sep) * view;
 
@@ -193,34 +254,22 @@ int main(int argc, char** argv) {
         const bool swap = (g_stereo == StereoMode::SideBySideSwapped);
         int half_w = draw_w / 2;
         Mat4 proj = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
-
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-        // Left half of the window
         glViewport(0, 0, half_w, draw_h);
         render_eye(renderer, scene, swap ? view_right : view_left, proj);
-
-        // Right half
         glViewport(half_w, 0, half_w, draw_h);
         render_eye(renderer, scene, swap ? view_left : view_right, proj);
         break;
       }
       case StereoMode::AnaglyphRedCyan: {
-        // Full-frame anaglyph: left → red, right → cyan (G+B)
         Mat4 proj = Mat4::perspective(1.0f, aspect, 0.1f, 100.f);
         glViewport(0, 0, draw_w, draw_h);
-
-        // Left eye into red channel
         glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
         glDepthFunc(GL_LESS);
         render_eye(renderer, scene, view_left, proj);
-
-        // Right eye into green+blue; allow equal depth so both eyes composite
         glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthFunc(GL_LEQUAL);
         render_eye(renderer, scene, view_right, proj);
-
-        // Restore defaults for next frame / UI
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthFunc(GL_LESS);
         break;

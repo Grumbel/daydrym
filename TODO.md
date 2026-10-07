@@ -12,10 +12,8 @@ Initial hello-world: desktop OpenGL 3.3 + optional GLES path, simple house + cub
 - [x] SPDX headers, AGENTS.md, this TODO
 
 ## Open / next
-- [ ] Android APK target (SDL2 + NDK, reuse patterns from pingus `nix/android.nix`)
-  - Side-by-side already present; add Android.mk / manifest / APK packaging
-  - Optional: open-source Cardboard SDK for distortion + head tracking
-- [x] Per-cube model matrices so the floating cubes can spin independently
+- [x] Android APK target (SDL2 + NDK, SBS stereo default, sensor look)
+  - [x] Per-cube model matrices so the floating cubes can spin independently
 - [x] Blinn-Phong lighting (directional + ambient + specular)
 - [x] Procedural checkerboard albedo texture with UVs
 - [x] Directional shadow map (2048, 3x3 PCF)
@@ -38,6 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: fix cube face winding vs outward normals (all 6 faces)
-- Bundle: daydrym-008.1-fix-cube-faces-96e286e.bundle
-  (supersedes 007.1; full history from base)
+- Current tip: Android APK (Daydream/Cardboard-style SBS)
+- Bundle: daydrym-009.1-android-apk-96e286e.bundle
+  (supersedes 008.1; full history from base)

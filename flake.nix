@@ -1,58 +1,61 @@
 {
-  description = "daydrym — simple GLES3/OpenGL VR-style hello world (house + cubes). Desktop Linux + future Android.";
+  description = "daydrym — GLES3/OpenGL VR-style hello world (house + cubes). Desktop + Android APK.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    sdl2-src = {
+      url = "https://github.com/libsdl-org/SDL/releases/download/release-2.30.3/SDL2-2.30.3.tar.gz";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, sdl2-src }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs {
           inherit system;
-          config.allowUnfree = true;
+          config = {
+            allowUnfree = true;
+            android_sdk.accept_license = true;
+          };
         };
         lib = pkgs.lib;
 
-        # Desktop binary (OpenGL 3.3 core)
+        src = lib.cleanSourceWith {
+          src = ./.;
+          filter = path: type:
+            let base = baseNameOf path; in
+            !(base == ".git" || base == "result" || base == "build"
+              || lib.hasSuffix ".bundle" base);
+        };
+
         daydrym = pkgs.stdenv.mkDerivation {
           pname = "daydrym";
           version = "0.1.0";
-          src = lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type:
-              let base = baseNameOf path; in
-              !(base == ".git" || base == "result" || base == "build"
-                || lib.hasSuffix ".bundle" base);
-          };
-
+          inherit src;
           nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config ];
           buildInputs = [ pkgs.SDL2 pkgs.libGL ];
-
-          cmakeFlags = [
-            "-DCMAKE_BUILD_TYPE=Release"
-          ];
-
-          # Ensure we can find SDL2 via pkg-config / cmake
-          postPatch = ''
-            # nothing needed
-          '';
+          cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
         };
 
-        # Optional pure-GLES desktop build (useful for testing the ES path)
         daydrym-gles = daydrym.overrideAttrs (old: {
           pname = "daydrym-gles";
           cmakeFlags = old.cmakeFlags ++ [ "-DUSE_GLES=ON" ];
-          # Mesa provides GLES
-          buildInputs = old.buildInputs ++ [ pkgs.libGLU /* often pulls GLES bits */ ];
         });
+
+        daydrym-android = import ./nix/android.nix {
+          inherit pkgs src;
+          sdl2Src = sdl2-src;
+          version = "0.1.0";
+        };
       in
       {
         packages = {
           default = daydrym;
           daydrym = daydrym;
           daydrym-gles = daydrym-gles;
+          daydrym-android = daydrym-android;
         };
 
         apps.default = {
@@ -68,12 +71,12 @@
             pkgs.libGL
             pkgs.gdb
             pkgs.clang-tools
+            pkgs.jdk17
           ];
           shellHook = ''
             echo "daydrym dev shell"
-            echo "  cmake -B build && cmake --build build"
-            echo "  ./build/daydrym"
-            echo "  nix run .   # or nix build && ./result/bin/daydrym"
+            echo "  nix build .#daydrym"
+            echo "  nix build .#daydrym-android   # APK (arm64-v8a, debug-signed)"
           '';
         };
       });

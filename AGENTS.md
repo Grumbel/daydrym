@@ -20,7 +20,7 @@ stays buildable. A real Daydream APK would need the old NDK SDK + services.
 - `src/` — main, renderer, scene, math
 - `include/` — headers
 - `flake.nix` — desktop package + devShell
-- Android packaging is intentionally minimal / future work (see TODO.md)
+- Android: `nix build .#daydrym-android` → `result/daydrym.apk` (see `nix/android.nix`)
 
 ## Conventions
 - Author: Ingo Ruhnke <grumbel@gmail.com>
