@@ -154,6 +154,16 @@ pkgs.stdenv.mkDerivation {
         cp -a "${cardboardSrc}" "$CB_SRC"
         chmod -R u+w "$CB_SRC"
       fi
+      # Version script exports Unity/Vulkan plugin entry points that are only
+      # defined when those optional sources are compiled. Strip them so a
+      # pure GLES Cardboard build can link.
+      if [ -f "$CB_SRC/sdk/cardboard_api.lds" ]; then
+        sed -i \
+          -e '/JNI_OnLoad/d' \
+          -e '/RenderAPI_Vulkan_OnPluginLoad/d' \
+          -e '/\*Unity\*/d' \
+          "$CB_SRC/sdk/cardboard_api.lds"
+      fi
       CB_BUILD="$WORK/cardboard-$ABI"
       CB_INSTALL="$WORK/cardboard-install-$ABI"
       mkdir -p "$CB_BUILD" "$CB_INSTALL/include" "$CB_INSTALL/lib"
@@ -166,7 +176,7 @@ pkgs.stdenv.mkDerivation {
         -DCARDBOARDSDK_RENDERING_VULKAN=OFF \
         -DCARDBOARDSDK_UNITY_PLUGIN=OFF \
         -DCARDBOARDSDK_RENDERING_GLESv3=ON
-      cmake --build "$CB_BUILD"
+      cmake --build "$CB_BUILD" --target GfxPluginCardboard
       # Install headers + library (target name varies)
       cp -a "$CB_SRC/sdk/include/." "$CB_INSTALL/include/" 2>/dev/null || true
       # Public header often at sdk/include/cardboard.h or packaging

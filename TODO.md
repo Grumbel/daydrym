@@ -36,12 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: Cardboard SDK head tracking + eye matrices on Android
-- Bundle: daydrym-018.1-cardboard-sdk-96e286e.bundle
-  (supersedes 017.1; full history from base)
-
-## Cardboard notes
-- Open-source Cardboard NDK: head tracker + lens eye/projection matrices
-- No Daydream controller (not in Cardboard SDK)
-- Distortion mesh compositor pass still TODO (currently correct stereo frusta in SBS)
-- `nix flake update cardboard-src` after pull
+- Current tip: fix Cardboard version script (no Unity/Vulkan symbols)
+- Bundle: daydrym-019.1-fix-cardboard-lds-96e286e.bundle
+  (supersedes 018.1; full history from base)
