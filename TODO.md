@@ -38,6 +38,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: V cycles stereo modes (mono / SBS / SBS swap / anaglyph)
-- Bundle: daydrym-006.1-stereo-modes-96e286e.bundle
-  (supersedes 005.1; full history from base)
+- Current tip: fix inverted normals (derive from winding)
+- Bundle: daydrym-007.1-fix-normals-96e286e.bundle
+  (supersedes 006.1; full history from base)
