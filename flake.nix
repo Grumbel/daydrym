@@ -62,9 +62,17 @@
           daydrym-android = daydrym-android;
         };
 
-        apps.default = {
-          type = "app";
-          program = "${daydrym}/bin/daydrym";
+        apps = rec {
+          default = daydrym;
+          daydrym = {
+            type = "app";
+            program = "${self.packages.${system}.daydrym}/bin/daydrym";
+          };
+          # Same program with an OpenGL ES 3.0 context (the Android render path).
+          daydrym-gles = {
+            type = "app";
+            program = "${self.packages.${system}.daydrym-gles}/bin/daydrym";
+          };
         };
 
         devShells.default = pkgs.mkShell {
