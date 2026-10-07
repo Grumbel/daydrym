@@ -17,9 +17,9 @@
 #endif
 
 static bool g_running = true;
-static bool g_stereo = false; // side-by-side for phone VR testing
+static bool g_stereo = false;
 
-static void handle_event(const SDL_Event& e, Scene& scene, float& mouse_sens) {
+static void handle_event(const SDL_Event& e, Scene& scene) {
   if (e.type == SDL_QUIT) {
     g_running = false;
   } else if (e.type == SDL_KEYDOWN) {
@@ -29,15 +29,18 @@ static void handle_event(const SDL_Event& e, Scene& scene, float& mouse_sens) {
       default: break;
     }
   } else if (e.type == SDL_MOUSEMOTION && (SDL_GetRelativeMouseMode() == SDL_TRUE)) {
-    scene.cam_yaw   += e.motion.xrel * mouse_sens;
-    scene.cam_pitch -= e.motion.yrel * mouse_sens;
-    // clamp pitch
+    const float sens = 0.0025f;
+    scene.cam_yaw   += e.motion.xrel * sens;
+    scene.cam_pitch -= e.motion.yrel * sens;
     const float lim = 1.4f;
     if (scene.cam_pitch >  lim) scene.cam_pitch = lim;
     if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
-  } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_RESIZED) {
-    // handled in main loop via SDL_GL_GetDrawableSize
   }
+}
+
+static void render_eye(Renderer& renderer, Scene& scene,
+                       const Mat4& view, const Mat4& proj) {
+  scene.draw(renderer, view, proj);
 }
 
 int main(int argc, char** argv) {
@@ -62,7 +65,7 @@ int main(int argc, char** argv) {
 
   int win_w = 1280, win_h = 720;
   SDL_Window* window = SDL_CreateWindow(
-      "daydrym — house & cubes (V = toggle stereo)",
+      "daydrym — lighting, shadows, textures (V = stereo)",
       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
       win_w, win_h,
       SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -77,9 +80,7 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError());
     return 1;
   }
-  SDL_GL_SetSwapInterval(1); // vsync
-
-  // Relative mouse for look
+  SDL_GL_SetSwapInterval(1);
   SDL_SetRelativeMouseMode(SDL_TRUE);
 
   int draw_w = 0, draw_h = 0;
@@ -92,26 +93,24 @@ int main(int argc, char** argv) {
   }
 
   Scene scene;
-  float mouse_sens = 0.0025f;
   Uint64 prev = SDL_GetPerformanceCounter();
   const double freq = static_cast<double>(SDL_GetPerformanceFrequency());
 
-  std::printf("Controls: WASD move, mouse look, V = stereo side-by-side, Esc = quit\n");
-  std::printf("Scene: stand in front of a simple house with colored cubes.\n");
+  std::printf("daydrym — Blinn-Phong lighting, shadow map, textured geometry\n");
+  std::printf("Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit\n");
 
   while (g_running) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
-      handle_event(e, scene, mouse_sens);
+      handle_event(e, scene);
     }
 
-    // Movement
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
     float speed = 3.5f;
     Uint64 now = SDL_GetPerformanceCounter();
     float dt = static_cast<float>((now - prev) / freq);
     prev = now;
-    if (dt > 0.05f) dt = 0.05f; // clamp
+    if (dt > 0.05f) dt = 0.05f;
 
     float cy = std::cos(scene.cam_yaw), sy = std::sin(scene.cam_yaw);
     Vec3 forward{sy, 0.f, -cy};
@@ -130,31 +129,34 @@ int main(int argc, char** argv) {
       renderer.resize(draw_w, draw_h);
     }
 
-    renderer.begin_frame();
+    // --- Shadow pass ---
+    renderer.begin_shadow_pass(scene.light, {0.f, 1.f, -2.f});
+    scene.draw_shadow(renderer);
+    renderer.end_shadow_pass();
 
+    // --- Lit pass ---
     Mat4 view = scene.view_matrix();
     float aspect = static_cast<float>(draw_w) / static_cast<float>(draw_h > 0 ? draw_h : 1);
 
+    renderer.begin_frame(scene.light, scene.cam_pos);
+
     if (g_stereo) {
-      // Simple side-by-side stereo (no lens distortion — good enough for hello / Cardboard test)
       float eye_sep = 0.065f;
       int half_w = draw_w / 2;
 
-      // Left eye
       glViewport(0, 0, half_w, draw_h);
       Mat4 proj_l = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
-      Mat4 eye_off_l = Mat4::translate({ eye_sep * 0.5f, 0.f, 0.f});
-      scene.draw(renderer, proj_l * eye_off_l * view);
+      Mat4 eye_l = Mat4::translate({ eye_sep * 0.5f, 0.f, 0.f});
+      render_eye(renderer, scene, eye_l * view, proj_l);
 
-      // Right eye
       glViewport(half_w, 0, half_w, draw_h);
       Mat4 proj_r = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
-      Mat4 eye_off_r = Mat4::translate({-eye_sep * 0.5f, 0.f, 0.f});
-      scene.draw(renderer, proj_r * eye_off_r * view);
+      Mat4 eye_r = Mat4::translate({-eye_sep * 0.5f, 0.f, 0.f});
+      render_eye(renderer, scene, eye_r * view, proj_r);
     } else {
       glViewport(0, 0, draw_w, draw_h);
       Mat4 proj = Mat4::perspective(1.0f, aspect, 0.1f, 100.f);
-      scene.draw(renderer, proj * view);
+      render_eye(renderer, scene, view, proj);
     }
 
     renderer.end_frame();

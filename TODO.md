@@ -15,7 +15,10 @@ Initial hello-world: desktop OpenGL 3.3 + optional GLES path, simple house + cub
 - [ ] Android APK target (SDL2 + NDK, reuse patterns from pingus `nix/android.nix`)
   - Side-by-side already present; add Android.mk / manifest / APK packaging
   - Optional: open-source Cardboard SDK for distortion + head tracking
-- [ ] Per-cube model matrices so the floating cubes can spin independently
+- [x] Per-cube model matrices so the floating cubes can spin independently
+- [x] Blinn-Phong lighting (directional + ambient + specular)
+- [x] Procedural checkerboard albedo texture with UVs
+- [x] Directional shadow map (2048, 3x3 PCF)
 - [ ] Simple textured floor or skybox (still keep deps low)
 - [ ] True Daydream path only if someone still has working hardware + GVR Services
 
@@ -35,6 +38,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: rename to daydrym
-- Bundle: daydrym-003.1-rename-daydrym-96e286e.bundle
-  (supersedes prior gles-vr-hello-* bundles; full history from base)
+- Current tip: lighting + shadows + textures
+- Bundle: daydrym-004.1-lighting-shadows-textures-96e286e.bundle
+  (supersedes 003.1; full history from base)

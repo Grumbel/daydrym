@@ -1,7 +1,7 @@
 # AGENTS.md — daydrym
 
 ## Project
-Simple GLES3 / OpenGL 3.3 “VR-style” hello world: first-person view of a house
+GLES3/OpenGL 3.3 VR-style hello world with Blinn-Phong lighting, shadow maps, and textured geometry: first-person view of a house
 made of cubes plus a few colored cubes on a green floor. Desktop Linux is the
 primary, easily testable target. Side-by-side stereo (key `V`) approximates
 phone VR / Cardboard / Daydream-style viewing for testing.

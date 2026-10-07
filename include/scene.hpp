@@ -11,14 +11,17 @@ public:
   Scene();
 
   void update(float dt);
-  void draw(Renderer& r, const Mat4& view_proj);
+  // Draw into the shadow map (depth only)
+  void draw_shadow(Renderer& r);
+  // Draw lit + textured + shadowed
+  void draw(Renderer& r, const Mat4& view, const Mat4& proj);
 
-  // Simple first-person camera state (mutated by main)
-  Vec3 cam_pos{0.f, 1.6f, 5.f};
-  float cam_yaw = 0.f;   // radians, 0 looks -Z
-  float cam_pitch = 0.f;
+  Vec3 cam_pos{0.f, 1.6f, 6.f};
+  float cam_yaw = 0.f;
+  float cam_pitch = -0.15f;
 
   Mat4 view_matrix() const;
+  Light light;
 
 private:
   std::vector<Vertex> house_;
@@ -28,8 +31,9 @@ private:
 
   void build_geometry();
   static void add_cube(std::vector<Vertex>& out, const Vec3& center,
-                       const Vec3& half_extents, const Vec3& color);
+                       const Vec3& half_extents, const Vec3& color,
+                       float uv_scale = 1.f);
   static void add_quad(std::vector<Vertex>& out,
                        const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d,
-                       const Vec3& color);
+                       const Vec3& normal, const Vec3& color, float uv_scale);
 };
