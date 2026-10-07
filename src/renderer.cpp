@@ -2,7 +2,6 @@
 // Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
 #include "renderer.hpp"
 
-#include <SDL.h>
 #include <cstdio>
 #include <vector>
 #include <cmath>

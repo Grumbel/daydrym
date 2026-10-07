@@ -1,23 +1,101 @@
 package com.daydrym;
 
-import android.content.pm.ActivityInfo;
+import android.app.Activity;
+import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
-import org.libsdl.app.SDLActivity;
+import com.google.vr.ndk.base.AndroidCompat;
+import com.google.vr.ndk.base.GvrLayout;
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.opengles.GL10;
 
-public class DaydrymActivity extends SDLActivity {
-    @Override
-    protected String[] getLibraries() {
-        return new String[] { "SDL2", "GfxPluginCardboard", "main" };
+/**
+ * Hosts a GvrLayout (Daydream / Cardboard compositor). All rendering happens
+ * in native code (gvr_app.cpp) on the GLSurfaceView's GL thread.
+ */
+public class DaydrymActivity extends Activity {
+    static {
+        System.loadLibrary("gvr");
+        System.loadLibrary("daydrym");
     }
+
+    private GvrLayout gvrLayout;
+    private GLSurfaceView surfaceView;
+
+    private native void nativeInit(long gvrContext);
+    private native void nativeDestroy();
+    private native void nativeOnResume();
+    private native void nativeOnPause();
+    private native void nativeOnSurfaceCreated();
+    private native void nativeOnDrawFrame();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setImmersive();
+
+        gvrLayout = new GvrLayout(this);
+
+        surfaceView = new GLSurfaceView(this);
+        surfaceView.setEGLContextClientVersion(3);
+        surfaceView.setEGLConfigChooser(8, 8, 8, 8, 0, 0);
+        surfaceView.setPreserveEGLContextOnPause(true);
+        surfaceView.setRenderer(new GLSurfaceView.Renderer() {
+            @Override
+            public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+                nativeOnSurfaceCreated();
+            }
+
+            @Override
+            public void onSurfaceChanged(GL10 gl, int width, int height) {
+            }
+
+            @Override
+            public void onDrawFrame(GL10 gl) {
+                nativeOnDrawFrame();
+            }
+        });
+        gvrLayout.setPresentationView(surfaceView);
+
+        // Daydream-ready devices: async reprojection needs sustained performance.
+        if (gvrLayout.setAsyncReprojectionEnabled(true)) {
+            AndroidCompat.setSustainedPerformanceMode(this, true);
+        }
+        AndroidCompat.setVrModeEnabled(this, true);
+
+        setContentView(gvrLayout);
+        nativeInit(gvrLayout.getGvrApi().getNativeGvrContext());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        gvrLayout.onResume();
+        surfaceView.onResume();
+        nativeOnResume();
+    }
+
+    @Override
+    protected void onPause() {
+        nativeOnPause();
+        surfaceView.onPause();
+        gvrLayout.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        gvrLayout.shutdown();
+        nativeDestroy();
+        super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        gvrLayout.onBackPressed();
+        super.onBackPressed();
     }
 
     @Override
@@ -28,15 +106,8 @@ public class DaydrymActivity extends SDLActivity {
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        setImmersive();
-    }
-
     private void setImmersive() {
-        View decor = getWindow().getDecorView();
-        decor.setSystemUiVisibility(
+        getWindow().getDecorView().setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION

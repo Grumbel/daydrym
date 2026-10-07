@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
 #include "scene.hpp"
+#include <cstdint>
 #include <cmath>
 
 void Scene::add_quad(std::vector<Vertex>& out,
@@ -87,6 +88,81 @@ void Scene::build_geometry() {
     add_cube(cubes_, {-1.5f, 0.4f, 2.5f}, {0.3f, 0.3f, 0.3f}, {0.95f, 0.85f, 0.25f}, 1.f);
     add_cube(cubes_, { 2.f, 1.2f, -6.f}, {0.6f, 0.6f, 0.6f}, {0.65f, 0.25f, 0.85f}, 1.f);
   }
+
+  build_table();
+
+  {
+    add_cube(controller_body_, {0.f, 0.f, 0.06f}, {0.02f, 0.01f, 0.06f}, {0.85f, 0.85f, 0.88f}, 1.f);
+    add_cube(controller_ray_, {0.f, 0.f, -0.5f}, {0.003f, 0.003f, 0.5f}, {1.0f, 0.25f, 0.20f}, 1.f);
+    add_cube(marker_, {0.f, 0.01f, 0.f}, {0.25f, 0.01f, 0.25f}, {1.0f, 0.85f, 0.15f}, 1.f);
+  }
+}
+
+// A table in front of the start position (camera looks down -Z from z=6),
+// covered in a deterministic pile of pseudo-random cubes.
+void Scene::build_table() {
+  const Vec3 c{0.f, 0.f, 4.2f};  // floor-level centre
+  const float top_y = 0.80f;     // table top surface height
+  const Vec3 wood{0.60f, 0.42f, 0.25f};
+  const Vec3 half{0.75f, 0.03f, 0.40f};  // top slab half extents
+
+  add_cube(table_, {c.x, top_y - half.y, c.z}, half, wood, 1.f);
+  const float leg = 0.035f, leg_h = (top_y - 2.f * half.y) * 0.5f;
+  for (int sx = -1; sx <= 1; sx += 2)
+    for (int sz = -1; sz <= 1; sz += 2)
+      add_cube(table_, {c.x + sx * (half.x - 0.06f), leg_h, c.z + sz * (half.z - 0.06f)},
+               {leg, leg_h, leg}, wood * 0.8f, 1.f);
+
+  uint32_t seed = 12345u;
+  auto rnd = [&seed]() {  // [0,1)
+    seed = seed * 1664525u + 1013904223u;
+    return static_cast<float>(seed >> 8) / 16777216.f;
+  };
+  auto color = [&rnd]() {
+    return Vec3{0.25f + 0.7f * rnd(), 0.25f + 0.7f * rnd(), 0.25f + 0.7f * rnd()};
+  };
+
+  for (int i = 0; i < 28; ++i) {
+    const Vec3 h{0.025f + 0.05f * rnd(), 0.025f + 0.07f * rnd(), 0.025f + 0.05f * rnd()};
+    const float x = c.x + (rnd() * 2.f - 1.f) * (half.x - 0.08f);
+    const float z = c.z + (rnd() * 2.f - 1.f) * (half.z - 0.08f);
+    add_cube(table_, {x, top_y + h.y, z}, h, color(), 1.f);
+    if (rnd() < 0.4f) {  // stack a smaller one on top
+      const Vec3 h2{h.x * 0.6f, 0.02f + 0.04f * rnd(), h.z * 0.6f};
+      add_cube(table_, {x, top_y + 2.f * h.y + h2.y, z}, h2, color(), 1.f);
+    }
+  }
+}
+
+void Scene::draw_controller(Renderer& r, const Mat4& view, const Mat4& proj,
+                            const Mat4& model, float ray_length,
+                            const ControllerInput& in) {
+  r.draw(controller_body_, model, view, proj);
+  r.draw(controller_ray_, model * Mat4::scale({1.f, 1.f, ray_length}), view, proj);
+
+  // The ray starts at the tip (z=0); the body extends backwards (+Z).
+  // Indicators on the top face (y = +0.01): touchpad, touch dot, buttons.
+  const Vec3 off{0.18f, 0.18f, 0.20f};
+  const float top = 0.0115f;
+  std::vector<Vertex> ind;
+  add_cube(ind, {0.f, top, 0.03f}, {0.016f, 0.0015f, 0.016f},
+           in.click ? Vec3{0.2f, 0.9f, 0.3f} : Vec3{0.35f, 0.35f, 0.38f}, 1.f);  // pad
+  if (in.touching) {
+    add_cube(ind, {(in.touch.x - 0.5f) * 0.03f, top + 0.002f, 0.03f + (in.touch.y - 0.5f) * 0.03f},
+             {0.004f, 0.002f, 0.004f}, {1.f, 1.f, 1.f}, 1.f);
+  }
+  add_cube(ind, {0.f, top, 0.07f}, {0.007f, 0.0015f, 0.007f},
+           in.app ? Vec3{0.3f, 0.6f, 1.f} : off, 1.f);   // app button
+  add_cube(ind, {0.f, top, 0.09f}, {0.007f, 0.0015f, 0.007f},
+           in.home ? Vec3{1.f, 0.8f, 0.2f} : off, 1.f);  // home button
+  if (in.trigger) {
+    add_cube(ind, {0.f, -0.011f, 0.06f}, {0.008f, 0.004f, 0.012f}, {1.f, 0.3f, 0.3f}, 1.f);
+  }
+  r.draw(ind, model, view, proj);
+}
+
+void Scene::draw_marker(Renderer& r, const Mat4& view, const Mat4& proj, const Vec3& pos) {
+  r.draw(marker_, Mat4::translate({pos.x, 0.f, pos.z}), view, proj);
 }
 
 void Scene::update(float dt) {
@@ -107,6 +183,7 @@ void Scene::draw_shadow(Renderer& r) {
   Mat4 rot = Mat4::rotate_y(time_ * 0.6f);
   Mat4 model = Mat4::translate({0.f, 0.15f * std::sin(time_ * 1.2f), 0.f}) * rot;
   r.draw_shadow(cubes_, model);
+  r.draw_shadow(table_, id);
 }
 
 void Scene::draw(Renderer& r, const Mat4& view, const Mat4& proj) {
@@ -116,4 +193,5 @@ void Scene::draw(Renderer& r, const Mat4& view, const Mat4& proj) {
   Mat4 rot = Mat4::rotate_y(time_ * 0.6f);
   Mat4 model = Mat4::translate({0.f, 0.15f * std::sin(time_ * 1.2f), 0.f}) * rot;
   r.draw(cubes_, model, view, proj);
+  r.draw(table_, id, view, proj);
 }

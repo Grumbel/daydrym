@@ -1,9 +1,8 @@
-# Android APK packaging for daydrym (SDL2 + GLES3 + SBS stereo).
+# Android APK packaging for daydrym (Google VR NDK + GLES3).
 # Produces a debug-signed APK for arm64-v8a (and optionally armeabi-v7a).
 { pkgs
 , src
-, sdl2Src
-, cardboardSrc
+, gvrAar
 , version ? "0.1.0"
 }:
 
@@ -92,171 +91,80 @@ pkgs.stdenv.mkDerivation {
     TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$HOST_TAG"
     API=24
 
-    SDL_SRC="${sdl2Src}"
     WORK="$PWD/android-build"
     mkdir -p "$WORK"
-    cp -a "$SDL_SRC" "$WORK/SDL2"
-    chmod -R u+w "$WORK/SDL2"
 
-    # Newer NDKs mark ALooper_pollAll as unavailable; prefer pollOnce (SDL 2.32+
-    # already has this, but keep a safety rewrite for older trees).
-    find "$WORK/SDL2" -type f -name '*.c' -print0 | xargs -0 sed -i       's/ALooper_pollAll(/ALooper_pollOnce(/g' || true
+    # --- Google VR SDK (headers, libgvr.so, Java classes, resources) ---
+    GVR_AAR="$WORK/gvr-aar"
+    mkdir -p "$GVR_AAR"
+    unzip -q "${gvrAar}" -d "$GVR_AAR"
+    GVR_PREFIX="$WORK/gvr"
+    mkdir -p "$GVR_PREFIX/include" "$GVR_PREFIX/lib"
+    cp -a "$GVR_AAR/headers/." "$GVR_PREFIX/include/"
 
-    # --- Build SDL2 + daydrym for each ABI ---
+    TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"
+    test -f "$TOOLCHAIN_FILE"
+    export ANDROID_NDK_HOME="$NDK" ANDROID_NDK="$NDK" ANDROID_NDK_ROOT="$NDK"
+
     for ABI in ${lib.concatStringsSep " " abis}; do
-      case "$ABI" in
-        arm64-v8a)
-          TARGET_TRIPLE=aarch64-linux-android
-          ;;
-        armeabi-v7a)
-          TARGET_TRIPLE=armv7a-linux-androideabi
-          ;;
-        *)
-          echo "unsupported ABI $ABI"; exit 1
-          ;;
-      esac
-
-      SYSROOT="$TOOLCHAIN/sysroot"
-      CC="$TOOLCHAIN/bin/''${TARGET_TRIPLE}''${API}-clang"
-      CXX="$TOOLCHAIN/bin/''${TARGET_TRIPLE}''${API}-clang++"
-      AR="$TOOLCHAIN/bin/llvm-ar"
-      RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
-      STRIP="$TOOLCHAIN/bin/llvm-strip"
-
-      SDL_BUILD="$WORK/sdl-$ABI"
-      SDL_INSTALL="$WORK/sdl-install-$ABI"
-      mkdir -p "$SDL_BUILD" "$SDL_INSTALL"
-
-      # Use the NDK-provided toolchain file so ANDROID_NDK / cpu-features resolve.
-      TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"
-      test -f "$TOOLCHAIN_FILE"
-
-      export ANDROID_NDK_HOME="$NDK"
-      export ANDROID_NDK="$NDK"
-      export ANDROID_NDK_ROOT="$NDK"
-
-      cmake -S "$WORK/SDL2" -B "$SDL_BUILD" -G Ninja \
-        -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
-        -DANDROID_ABI="$ABI" \
-        -DANDROID_PLATFORM="android-$API" \
-        -DANDROID_STL=c++_shared \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DSDL_SHARED=ON \
-        -DSDL_STATIC=OFF \
-        -DSDL_TEST=OFF \
-        -DSDL_ANDROID_JAR=OFF \
-        -DCMAKE_INSTALL_PREFIX="$SDL_INSTALL"
-      cmake --build "$SDL_BUILD" --target install
-
-      # --- Google Cardboard open-source SDK ---
-      CB_SRC="$WORK/cardboard"
-      if [ ! -d "$CB_SRC" ]; then
-        cp -a "${cardboardSrc}" "$CB_SRC"
-        chmod -R u+w "$CB_SRC"
-      fi
-      # Version script exports Unity/Vulkan plugin entry points that are only
-      # defined when those optional sources are compiled. Strip them so a
-      # pure GLES Cardboard build can link.
-      if [ -f "$CB_SRC/sdk/cardboard_api.lds" ]; then
-        sed -i \
-          -e '/JNI_OnLoad/d' \
-          -e '/RenderAPI_Vulkan_OnPluginLoad/d' \
-          -e '/\*Unity\*/d' \
-          "$CB_SRC/sdk/cardboard_api.lds"
-      fi
-      CB_BUILD="$WORK/cardboard-$ABI"
-      CB_INSTALL="$WORK/cardboard-install-$ABI"
-      mkdir -p "$CB_BUILD" "$CB_INSTALL/include" "$CB_INSTALL/lib"
-      cmake -S "$CB_SRC/sdk" -B "$CB_BUILD" -G Ninja \
-        -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
-        -DANDROID_ABI="$ABI" \
-        -DANDROID_PLATFORM="android-$API" \
-        -DANDROID_STL=c++_shared \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCARDBOARDSDK_RENDERING_VULKAN=OFF \
-        -DCARDBOARDSDK_UNITY_PLUGIN=OFF \
-        -DCARDBOARDSDK_RENDERING_GLESv3=ON
-      cmake --build "$CB_BUILD" --target GfxPluginCardboard
-      # Install headers + library (target name varies)
-      cp -a "$CB_SRC/sdk/include/." "$CB_INSTALL/include/" 2>/dev/null || true
-      # Public header often at sdk/include/cardboard.h or packaging
-      find "$CB_SRC" -name 'cardboard.h' -exec cp -v {} "$CB_INSTALL/include/" \;
-      find "$CB_BUILD" -name '*.so' -exec cp -v {} "$CB_INSTALL/lib/" \;
-      find "$CB_BUILD" -name '*.a' -exec cp -v {} "$CB_INSTALL/lib/" \;
+      LIBDIR="$WORK/apk/lib/$ABI"
+      mkdir -p "$LIBDIR"
+      cp "$GVR_AAR/jni/$ABI/libgvr.so" "$GVR_PREFIX/lib/libgvr.so"
 
       APP_BUILD="$WORK/app-$ABI"
-      mkdir -p "$APP_BUILD"
       cmake -S "$SRC_ROOT" -B "$APP_BUILD" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
         -DANDROID_ABI="$ABI" \
         -DANDROID_PLATFORM="android-$API" \
         -DANDROID_STL=c++_shared \
         -DCMAKE_BUILD_TYPE=Release \
-        -DSDL2_ANDROID_PREFIX="$SDL_INSTALL" \
-        -DDAYDRYM_USE_CARDBOARD=ON \
-        -DCARDBOARD_PREFIX="$CB_INSTALL"
+        -DGVR_PREFIX="$GVR_PREFIX"
       cmake --build "$APP_BUILD"
 
-      LIBDIR="$WORK/apk/lib/$ABI"
-      mkdir -p "$LIBDIR"
-      cp -v "$SDL_INSTALL/lib/"*.so "$LIBDIR/" || true
-      # CMake may put libmain.so in app build dir
-      find "$APP_BUILD" -name 'libmain.so' -exec cp -v {} "$LIBDIR/" \;
-      find "$CB_INSTALL/lib" -name '*.so' -exec cp -v {} "$LIBDIR/" \; || true
+      cp -v "$APP_BUILD/libdaydrym.so" "$LIBDIR/"
+      cp -v "$GVR_AAR/jni/$ABI/libgvr.so" "$LIBDIR/"
       # libc++_shared must match the ABI (do not pick armeabi for arm64)
       case "$ABI" in
         arm64-v8a)   CPP_ARCH="aarch64-linux-android" ;;
         armeabi-v7a) CPP_ARCH="arm-linux-androideabi" ;;
-        x86_64)      CPP_ARCH="x86_64-linux-android" ;;
-        *)           CPP_ARCH="$TARGET_TRIPLE" ;;
+        *) echo "unsupported ABI $ABI"; exit 1 ;;
       esac
-      CPP_SHARED=$(find "$NDK/toolchains/llvm/prebuilt/$HOST_TAG/sysroot/usr/lib/$CPP_ARCH" -name 'libc++_shared.so' 2>/dev/null | head -1 || true)
-      if [ -z "$CPP_SHARED" ]; then
-        CPP_SHARED=$(find "$NDK" -path "*$CPP_ARCH*" -name 'libc++_shared.so' 2>/dev/null | head -1 || true)
-      fi
-      if [ -n "$CPP_SHARED" ]; then
-        cp -v "$CPP_SHARED" "$LIBDIR/"
-      else
-        echo "WARNING: libc++_shared.so not found for $CPP_ARCH"
-      fi
+      cp -v "$TOOLCHAIN/sysroot/usr/lib/$CPP_ARCH/libc++_shared.so" "$LIBDIR/"
     done
 
-    # --- Java: SDL Android sources + our activity ---
-    JAVA_OUT="$WORK/java"
-    CLASSES="$WORK/classes"
-    mkdir -p "$JAVA_OUT" "$CLASSES"
-    cp -a "$WORK/SDL2/android-project/app/src/main/java/org" "$JAVA_OUT/"
-    cp -a "$SRC_ROOT/mk/android/app/src/main/java/com" "$JAVA_OUT/"
-
-    find "$JAVA_OUT" -name '*.java' > "$WORK/sources.list"
-    javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$CLASSES" @"$WORK/sources.list"
-
-    # jar → dex
-    JAR="$WORK/classes.jar"
-    jar cf "$JAR" -C "$CLASSES" .
-    mkdir -p "$WORK/dex"
-    d8 --min-api ${toString 24} --output "$WORK/dex" "$JAR"
-    # d8 outputs classes.dex in the output dir
-    cp "$WORK/dex/classes.dex" "$WORK/apk/classes.dex"
-
-    # Resources + manifest
-    mkdir -p "$WORK/apk/res"
+    # --- Resources: app + GVR library resources, R.java for both packages ---
+    mkdir -p "$WORK/apk/res" "$WORK/gen"
     cp -a "$SRC_ROOT/mk/android/app/src/main/res/." "$WORK/apk/res/"
     cp "$SRC_ROOT/mk/android/app/src/main/AndroidManifest.xml" "$WORK/apk/AndroidManifest.xml"
 
-    # Package APK with aapt
     AAPT="$BUILD_TOOLS/aapt"
     UNSIGNED="$WORK/daydrym-unsigned.apk"
-    "$AAPT" package -f -M "$WORK/apk/AndroidManifest.xml" \
-      -S "$WORK/apk/res" \
+    "$AAPT" package -f -m --auto-add-overlay \
+      -M "$WORK/apk/AndroidManifest.xml" \
+      -S "$GVR_AAR/res" -S "$WORK/apk/res" \
       -I "$ANDROID_JAR" \
+      -J "$WORK/gen" \
+      --extra-packages com.google.vr.cardboard \
       -F "$UNSIGNED" \
       --min-sdk-version 24 \
-      --target-sdk-version 34
+      --target-sdk-version 26
+
+    # --- Java: our activity + GVR classes + generated R → dex ---
+    CLASSES="$WORK/classes"
+    mkdir -p "$CLASSES"
+    find "$SRC_ROOT/mk/android/app/src/main/java" "$WORK/gen" -name '*.java' > "$WORK/sources.list"
+    javac --release 11 -encoding UTF-8 \
+      -cp "$ANDROID_JAR:$GVR_AAR/classes.jar" -d "$CLASSES" @"$WORK/sources.list"
+
+    mkdir -p "$WORK/dex"
+    jar cf "$WORK/classes.jar" -C "$CLASSES" .
+    d8 --min-api 24 --lib "$ANDROID_JAR" --output "$WORK/dex" \
+      "$WORK/classes.jar" "$GVR_AAR/classes.jar"
+    cp "$WORK/dex"/classes*.dex "$WORK/apk/"
 
     # Add native libs + dex
     cd "$WORK/apk"
-    ${pkgs.zip}/bin/zip -u "$UNSIGNED" classes.dex
+    ${pkgs.zip}/bin/zip -u "$UNSIGNED" classes*.dex
     find lib -type f -name '*.so' | ${pkgs.zip}/bin/zip -u "$UNSIGNED" -@
 
     # Align + sign with debug key
@@ -277,7 +185,7 @@ pkgs.stdenv.mkDerivation {
     mkdir -p $out
     cp "$SIGNED" $out/daydrym.apk
     echo "Built $out/daydrym.apk"
-  '';
+  ''; 
 
   installPhase = ''
     # already installed in buildPhase

@@ -3,22 +3,15 @@
 #include "renderer.hpp"
 #include "scene.hpp"
 #include "math.hpp"
-#include "cardboard_vr.hpp"
 
 #include <SDL.h>
 #include <cstdio>
 #include <cmath>
-#if defined(__ANDROID__)
-#  include <android/log.h>
-#  define DAYDRYM_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "daydrym", __VA_ARGS__)
-#  define DAYDRYM_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "daydrym", __VA_ARGS__)
-#else
 #  define DAYDRYM_LOGI(...) std::printf(__VA_ARGS__); std::printf("\n")
 #  define DAYDRYM_LOGE(...) std::fprintf(stderr, __VA_ARGS__); std::fprintf(stderr, "\n")
-#endif
 #include <new>
 
-#if defined(USE_GLES) || defined(__ANDROID__)
+#if defined(USE_GLES)
 #  include <GLES3/gl3.h>
 #else
 #  define GL_GLEXT_PROTOTYPES 1
@@ -46,41 +39,18 @@ static const char* stereo_mode_name(StereoMode m) {
 
 static bool g_running = true;
 static bool g_paused = false;
-static CardboardVr* g_cardboard = nullptr;
-#if defined(__ANDROID__)
-// Phone / Daydream View: always start in SBS. Anaglyph is desktop-only.
-static StereoMode g_stereo = StereoMode::SideBySide;
-#else
 static StereoMode g_stereo = StereoMode::Mono;
-#endif
 
 static void cycle_stereo_mode() {
-#if defined(__ANDROID__)
-  // Only cycle modes that work in a headset: SBS <-> SBS swapped.
-  // (Tap / controller click used to walk into anaglyph and look "broken".)
-  if (g_stereo == StereoMode::SideBySide)
-    g_stereo = StereoMode::SideBySideSwapped;
-  else
-    g_stereo = StereoMode::SideBySide;
-#else
   int next = (static_cast<int>(g_stereo) + 1) % static_cast<int>(StereoMode::Count);
   g_stereo = static_cast<StereoMode>(next);
-#endif
   DAYDRYM_LOGI("Stereo mode: %s", stereo_mode_name(g_stereo));
 }
 
 static void handle_event(const SDL_Event& e, Scene& scene) {
   switch (e.type) {
     case SDL_QUIT:
-      // On Android, surfaceDestroyed often synthesizes SDL_QUIT. Treat as pause
-      // so the process can resume when the VR compositor gives us a surface again.
-#if defined(__ANDROID__)
-      g_paused = true;
-      if (g_cardboard) g_cardboard->pause();
-      std::printf("SDL_QUIT while on Android — pausing instead of exiting\n");
-#else
       g_running = false;
-#endif
       break;
     case SDL_APP_TERMINATING:
       g_running = false;
@@ -89,7 +59,6 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
     case SDL_APP_WILLENTERBACKGROUND:
     case SDL_APP_DIDENTERBACKGROUND:
       g_paused = true;
-      if (g_cardboard) g_cardboard->pause();
       std::printf("Paused (background)\n");
       break;
 
@@ -98,10 +67,6 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
 
     case SDL_APP_DIDENTERFOREGROUND:
       g_paused = false;
-#if defined(__ANDROID__)
-      g_stereo = StereoMode::SideBySide;
-      if (g_cardboard) g_cardboard->resume();
-#endif
       std::printf("Resumed (foreground), stereo=%s\n", stereo_mode_name(g_stereo));
       break;
 
@@ -124,7 +89,6 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
       }
       break;
 
-#if !defined(__ANDROID__)
     case SDL_MOUSEMOTION:
       if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
         const float sens = 0.0025f;
@@ -135,23 +99,12 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
         if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
       }
       break;
-#endif
 
-#if defined(__ANDROID__)
-    // Do NOT cycle stereo on every finger/controller click — that pushed
-    // users into anaglyph. Long-press or V (USB keyboard) can still cycle.
-    case SDL_FINGERDOWN:
-    case SDL_MOUSEBUTTONDOWN:
-      (void)e;
-      break;
-#endif
 
     default:
       break;
   }
-#if !defined(__ANDROID__)
   (void)scene;
-#endif
 }
 
 static Mat4 eye_translate(float sep_sign, float eye_sep) {
@@ -163,45 +116,11 @@ static void render_eye(Renderer& renderer, Scene& scene,
   scene.draw(renderer, view, proj);
 }
 
-#if defined(__ANDROID__)
-static void update_camera_from_sensors(Scene& scene) {
-  const int count = SDL_NumSensors();
-  for (int i = 0; i < count; ++i) {
-    if (SDL_SensorGetDeviceType(i) != SDL_SENSOR_ACCEL)
-      continue;
-    SDL_Sensor* accel = SDL_SensorOpen(i);
-    if (!accel) continue;
-    float data[3] = {0, 0, 0};
-    if (SDL_SensorGetData(accel, data, 3) == 0) {
-      float ax = data[0], ay = data[1], az = data[2];
-      scene.cam_pitch = std::atan2(-az, std::sqrt(ax * ax + ay * ay));
-      scene.cam_yaw   = std::atan2(ax, ay);
-      const float lim = 1.4f;
-      if (scene.cam_pitch >  lim) scene.cam_pitch = lim;
-      if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
-    }
-    break;
-  }
-}
-
-static void android_set_immersive(SDL_Window* window) {
-  SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
-  // Hide system UI as much as SDL allows
-  SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
-}
-#endif
 
 int main(int argc, char** argv) {
   (void)argc; (void)argv;
 
   SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
-#if defined(__ANDROID__)
-  // Mirage Solo / Daydream: stay landscape. SDL was flipping to portrait
-  // (1440x2560) via requestedOrientation=FULL_USER and then the activity died.
-  SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
-  SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
-  SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
-#endif
 
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_SENSOR) != 0) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
@@ -210,7 +129,7 @@ int main(int argc, char** argv) {
     }
   }
 
-#if defined(USE_GLES) || defined(__ANDROID__)
+#if defined(USE_GLES)
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -224,11 +143,7 @@ int main(int argc, char** argv) {
 
   int win_w = 1280, win_h = 720;
   Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
-#if defined(__ANDROID__)
-  flags |= SDL_WINDOW_FULLSCREEN;
-#else
   flags |= SDL_WINDOW_RESIZABLE;
-#endif
 
   SDL_Window* window = SDL_CreateWindow(
       "daydrym",
@@ -239,12 +154,6 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
     return 1;
   }
-#if defined(__ANDROID__)
-  // Hard-lock landscape after create (Mirage was ending up in portrait)
-  SDL_SetWindowDisplayMode(window, nullptr);
-  SDL_GetWindowSize(window, &win_w, &win_h);
-  DAYDRYM_LOGI("Window after create: %dx%d", win_w, win_h);
-#endif
 
   SDL_GLContext ctx = SDL_GL_CreateContext(window);
   if (!ctx) {
@@ -252,11 +161,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   SDL_GL_SetSwapInterval(1);
-#if !defined(__ANDROID__)
   SDL_SetRelativeMouseMode(SDL_TRUE);
-#else
-  android_set_immersive(window);
-#endif
 
   int draw_w = 0, draw_h = 0;
   SDL_GL_GetDrawableSize(window, &draw_w, &draw_h);
@@ -266,17 +171,6 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "Renderer init failed\n");
     return 1;
   }
-
-  CardboardVr cardboard;
-  g_cardboard = &cardboard;
-#if defined(__ANDROID__)
-  if (cardboard.init(draw_w, draw_h)) {
-    DAYDRYM_LOGI("Cardboard SDK active (head tracking + lens eye matrices)");
-    g_stereo = StereoMode::SideBySide;
-  } else {
-    DAYDRYM_LOGI("Cardboard SDK unavailable — fallback head tracking");
-  }
-#endif
 
   Scene scene;
   Uint64 prev = SDL_GetPerformanceCounter();
@@ -298,11 +192,6 @@ int main(int argc, char** argv) {
       continue;
     }
 
-#if defined(__ANDROID__)
-    if (!(g_cardboard && g_cardboard->ok())) {
-      update_camera_from_sensors(scene);
-    }
-#endif
 
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
     float speed = 3.5f;
@@ -365,20 +254,6 @@ int main(int argc, char** argv) {
     Mat4 proj_left  = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
     Mat4 proj_right = proj_left;
 
-#if defined(__ANDROID__)
-    if (g_cardboard && g_cardboard->ok()) {
-      g_cardboard->set_screen_size(draw_w, draw_h);
-      Mat4 head = g_cardboard->head_view(0);
-      // Place the scene in front of the tracked head
-      Mat4 world = Mat4::translate({-scene.cam_pos.x, -scene.cam_pos.y, -scene.cam_pos.z});
-      Mat4 head_view = head * world;
-      view_left  = g_cardboard->eye_from_head(0) * head_view;
-      view_right = g_cardboard->eye_from_head(1) * head_view;
-      proj_left  = g_cardboard->eye_projection(0, 0.1f, 100.f);
-      proj_right = g_cardboard->eye_projection(1, 0.1f, 100.f);
-      view = head_view;
-    }
-#endif
 
     renderer.begin_frame(scene.light, scene.cam_pos);
 

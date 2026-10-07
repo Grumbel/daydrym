@@ -4,17 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    sdl2-src = {
-      url = "https://github.com/libsdl-org/SDL/releases/download/release-2.32.8/SDL2-2.32.8.tar.gz";
-      flake = false;
-    };
-    cardboard-src = {
-      url = "github:googlevr/cardboard";
-      flake = false;
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, sdl2-src, cardboard-src }:
+  outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs {
@@ -48,10 +40,15 @@
           cmakeFlags = old.cmakeFlags ++ [ "-DUSE_GLES=ON" ];
         });
 
+        # Archived Google VR SDK (headers, libgvr.so, Java classes), pinned.
+        gvrAar = pkgs.fetchurl {
+          url = "https://raw.githubusercontent.com/googlevr/gvr-android-sdk/f6b00dea8dc6a6f8b5e8da8897ade615b170b088/libraries/sdk-base-1.200.0.aar";
+          hash = "sha256-86aWE/1BSQPqEWZLgu5CW6ETQiveFTwwtQTXbrBHpbU=";
+        };
+
         daydrym-android = import ./nix/android.nix {
           inherit pkgs src;
-          sdl2Src = sdl2-src;
-          cardboardSrc = cardboard-src;
+          inherit gvrAar;
           version = "0.1.0";
         };
       in

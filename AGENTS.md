@@ -6,18 +6,21 @@ made of cubes plus a few colored cubes on a green floor. Desktop Linux is the
 primary, easily testable target. Side-by-side stereo (key `V`) approximates
 phone VR / Cardboard / Daydream-style viewing for testing.
 
-Google Daydream itself is discontinued (SDK archived 2019, services gone for
-new users). This project deliberately stays free of the archived GVR SDK so it
-stays buildable. A real Daydream APK would need the old NDK SDK + services.
+Google Daydream itself is discontinued (SDK archived 2019), but the Lenovo Mirage
+Solo still ships working Google VR Services. A plain 2D/SDL window is *not*
+shown on the headset's lenses (the VR compositor only takes buffers submitted
+through GVR), so the Android build uses the archived Google VR NDK
+(`sdk-base-1.200.0.aar`, pinned and fetched by `flake.nix`). The desktop build
+stays SDL2-only.
 
 ## Goals
 - Compile and run under NixOS / Linux with a normal desktop GL context.
 - Same codebase path ready for GLES3 (Android / pure ES).
-- Minimal dependencies: SDL2 + system OpenGL / GLES.
+- Minimal dependencies: SDL2 + system OpenGL / GLES (desktop); GVR NDK (Android).
 - GPLv3+, REUSE-friendly SPDX headers.
 
 ## Layout
-- `src/` — main, renderer, scene, math
+- `src/` — main (desktop/SDL), gvr_app (Android/GVR JNI), renderer, scene, math
 - `include/` — headers
 - `flake.nix` — desktop package + devShell
 - Android: `nix build .#daydrym-android` → `result/daydrym.apk` (see `nix/android.nix`)
