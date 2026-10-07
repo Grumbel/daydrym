@@ -22,19 +22,19 @@ Initial hello-world: desktop OpenGL 3.3 + optional GLES path, simple house + cub
 ## Build / run (desktop)
 ```bash
 nix build
-./result/bin/gles-vr-hello
+./result/bin/daydrym
 
 # or
 nix develop
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-./build/gles-vr-hello
+./build/daydrym
 ```
 
 Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: 9356ba2 (Vec3 operator-= fix)
-- Bundle: gles-vr-hello-002.1-fix-vec3-operator-96e286e.bundle
-  (supersedes 001.1; full history from base)
+- Current tip: rename to daydrym
+- Bundle: daydrym-003.1-rename-daydrym-96e286e.bundle
+  (supersedes prior gles-vr-hello-* bundles; full history from base)

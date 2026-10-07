@@ -1,4 +1,4 @@
-# AGENTS.md — gles-vr-hello
+# AGENTS.md — daydrym
 
 ## Project
 Simple GLES3 / OpenGL 3.3 “VR-style” hello world: first-person view of a house

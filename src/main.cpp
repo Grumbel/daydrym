@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
 
   int win_w = 1280, win_h = 720;
   SDL_Window* window = SDL_CreateWindow(
-      "GLES VR Hello — house & cubes (V = toggle stereo)",
+      "daydrym — house & cubes (V = toggle stereo)",
       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
       win_w, win_h,
       SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);

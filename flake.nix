@@ -1,5 +1,5 @@
 {
-  description = "Simple GLES3 VR-style hello world (house + cubes). Desktop Linux + Android APK.";
+  description = "daydrym — simple GLES3/OpenGL VR-style hello world (house + cubes). Desktop Linux + future Android.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -16,8 +16,8 @@
         lib = pkgs.lib;
 
         # Desktop binary (OpenGL 3.3 core)
-        gles-vr-hello = pkgs.stdenv.mkDerivation {
-          pname = "gles-vr-hello";
+        daydrym = pkgs.stdenv.mkDerivation {
+          pname = "daydrym";
           version = "0.1.0";
           src = lib.cleanSourceWith {
             src = ./.;
@@ -41,8 +41,8 @@
         };
 
         # Optional pure-GLES desktop build (useful for testing the ES path)
-        gles-vr-hello-gles = gles-vr-hello.overrideAttrs (old: {
-          pname = "gles-vr-hello-gles";
+        daydrym-gles = daydrym.overrideAttrs (old: {
+          pname = "daydrym-gles";
           cmakeFlags = old.cmakeFlags ++ [ "-DUSE_GLES=ON" ];
           # Mesa provides GLES
           buildInputs = old.buildInputs ++ [ pkgs.libGLU /* often pulls GLES bits */ ];
@@ -50,14 +50,14 @@
       in
       {
         packages = {
-          default = gles-vr-hello;
-          gles-vr-hello = gles-vr-hello;
-          gles-vr-hello-gles = gles-vr-hello-gles;
+          default = daydrym;
+          daydrym = daydrym;
+          daydrym-gles = daydrym-gles;
         };
 
         apps.default = {
           type = "app";
-          program = "${gles-vr-hello}/bin/gles-vr-hello";
+          program = "${daydrym}/bin/daydrym";
         };
 
         devShells.default = pkgs.mkShell {
@@ -70,10 +70,10 @@
             pkgs.clang-tools
           ];
           shellHook = ''
-            echo "gles-vr-hello dev shell"
+            echo "daydrym dev shell"
             echo "  cmake -B build && cmake --build build"
-            echo "  ./build/gles-vr-hello"
-            echo "  nix run .   # or nix build && ./result/bin/gles-vr-hello"
+            echo "  ./build/daydrym"
+            echo "  nix run .   # or nix build && ./result/bin/daydrym"
           '';
         };
       });

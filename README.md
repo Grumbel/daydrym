@@ -1,4 +1,4 @@
-# gles-vr-hello
+# daydrym
 
 Tiny first-person GLES3 / OpenGL 3.3 demo: stand in front of a simple house
 built from cubes, with a few colored cubes on a green floor.
@@ -10,10 +10,10 @@ Intended as a “hello world” starting point for phone-VR style experiments
 ## Desktop (Nix)
 
 ```bash
-nix run github:…/gles-vr-hello          # once published
+nix run github:…/daydrym          # once published
 # or from a checkout:
 nix build
-./result/bin/gles-vr-hello
+./result/bin/daydrym
 ```
 
 Controls:
