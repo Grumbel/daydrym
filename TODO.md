@@ -36,6 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: fix Cardboard version script (no Unity/Vulkan symbols)
-- Bundle: daydrym-019.1-fix-cardboard-lds-96e286e.bundle
-  (supersedes 018.1; full history from base)
+- Current tip: link GfxPluginCardboard (not cardboard_api)
+- Bundle: daydrym-020.1-fix-cardboard-libname-96e286e.bundle
+  (supersedes 019.1; full history from base)

@@ -8,7 +8,7 @@ import org.libsdl.app.SDLActivity;
 public class DaydrymActivity extends SDLActivity {
     @Override
     protected String[] getLibraries() {
-        return new String[] { "SDL2", "main" };
+        return new String[] { "SDL2", "GfxPluginCardboard", "main" };
     }
 
     @Override
