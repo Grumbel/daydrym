@@ -3,6 +3,7 @@
 { pkgs
 , src
 , sdl2Src
+, cardboardSrc
 , version ? "0.1.0"
 }:
 
@@ -147,6 +148,32 @@ pkgs.stdenv.mkDerivation {
         -DCMAKE_INSTALL_PREFIX="$SDL_INSTALL"
       cmake --build "$SDL_BUILD" --target install
 
+      # --- Google Cardboard open-source SDK ---
+      CB_SRC="$WORK/cardboard"
+      if [ ! -d "$CB_SRC" ]; then
+        cp -a "${cardboardSrc}" "$CB_SRC"
+        chmod -R u+w "$CB_SRC"
+      fi
+      CB_BUILD="$WORK/cardboard-$ABI"
+      CB_INSTALL="$WORK/cardboard-install-$ABI"
+      mkdir -p "$CB_BUILD" "$CB_INSTALL/include" "$CB_INSTALL/lib"
+      cmake -S "$CB_SRC/sdk" -B "$CB_BUILD" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
+        -DANDROID_ABI="$ABI" \
+        -DANDROID_PLATFORM="android-$API" \
+        -DANDROID_STL=c++_shared \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCARDBOARDSDK_RENDERING_VULKAN=OFF \
+        -DCARDBOARDSDK_UNITY_PLUGIN=OFF \
+        -DCARDBOARDSDK_RENDERING_GLESv3=ON
+      cmake --build "$CB_BUILD"
+      # Install headers + library (target name varies)
+      cp -a "$CB_SRC/sdk/include/." "$CB_INSTALL/include/" 2>/dev/null || true
+      # Public header often at sdk/include/cardboard.h or packaging
+      find "$CB_SRC" -name 'cardboard.h' -exec cp -v {} "$CB_INSTALL/include/" \;
+      find "$CB_BUILD" -name '*.so' -exec cp -v {} "$CB_INSTALL/lib/" \;
+      find "$CB_BUILD" -name '*.a' -exec cp -v {} "$CB_INSTALL/lib/" \;
+
       APP_BUILD="$WORK/app-$ABI"
       mkdir -p "$APP_BUILD"
       cmake -S "$SRC_ROOT" -B "$APP_BUILD" -G Ninja \
@@ -155,7 +182,9 @@ pkgs.stdenv.mkDerivation {
         -DANDROID_PLATFORM="android-$API" \
         -DANDROID_STL=c++_shared \
         -DCMAKE_BUILD_TYPE=Release \
-        -DSDL2_ANDROID_PREFIX="$SDL_INSTALL"
+        -DSDL2_ANDROID_PREFIX="$SDL_INSTALL" \
+        -DDAYDRYM_USE_CARDBOARD=ON \
+        -DCARDBOARD_PREFIX="$CB_INSTALL"
       cmake --build "$APP_BUILD"
 
       LIBDIR="$WORK/apk/lib/$ABI"
@@ -163,6 +192,7 @@ pkgs.stdenv.mkDerivation {
       cp -v "$SDL_INSTALL/lib/"*.so "$LIBDIR/" || true
       # CMake may put libmain.so in app build dir
       find "$APP_BUILD" -name 'libmain.so' -exec cp -v {} "$LIBDIR/" \;
+      find "$CB_INSTALL/lib" -name '*.so' -exec cp -v {} "$LIBDIR/" \; || true
       # libc++_shared must match the ABI (do not pick armeabi for arm64)
       case "$ABI" in
         arm64-v8a)   CPP_ARCH="aarch64-linux-android" ;;

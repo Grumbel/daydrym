@@ -3,6 +3,7 @@
 #include "renderer.hpp"
 #include "scene.hpp"
 #include "math.hpp"
+#include "cardboard_vr.hpp"
 
 #include <SDL.h>
 #include <cstdio>
@@ -37,6 +38,7 @@ static const char* stereo_mode_name(StereoMode m) {
 
 static bool g_running = true;
 static bool g_paused = false;
+static CardboardVr* g_cardboard = nullptr;
 #if defined(__ANDROID__)
 // Phone / Daydream View: always start in SBS. Anaglyph is desktop-only.
 static StereoMode g_stereo = StereoMode::SideBySide;
@@ -69,6 +71,7 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
     case SDL_APP_WILLENTERBACKGROUND:
     case SDL_APP_DIDENTERBACKGROUND:
       g_paused = true;
+      if (g_cardboard) g_cardboard->pause();
       std::printf("Paused (background)\n");
       break;
 
@@ -78,8 +81,8 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
     case SDL_APP_DIDENTERFOREGROUND:
       g_paused = false;
 #if defined(__ANDROID__)
-      // Re-assert headset-friendly stereo after returning from the VR menu / launcher
       g_stereo = StereoMode::SideBySide;
+      if (g_cardboard) g_cardboard->resume();
 #endif
       std::printf("Resumed (foreground), stereo=%s\n", stereo_mode_name(g_stereo));
       break;
@@ -230,6 +233,17 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  CardboardVr cardboard;
+  g_cardboard = &cardboard;
+#if defined(__ANDROID__)
+  if (cardboard.init(draw_w, draw_h)) {
+    std::printf("Cardboard SDK active (head tracking + lens eye matrices)\n");
+    g_stereo = StereoMode::SideBySide;
+  } else {
+    std::printf("Cardboard SDK unavailable — fallback head tracking\n");
+  }
+#endif
+
   Scene scene;
   Uint64 prev = SDL_GetPerformanceCounter();
   const double freq = static_cast<double>(SDL_GetPerformanceFrequency());
@@ -251,7 +265,9 @@ int main(int argc, char** argv) {
     }
 
 #if defined(__ANDROID__)
-    update_camera_from_sensors(scene);
+    if (!(g_cardboard && g_cardboard->ok())) {
+      update_camera_from_sensors(scene);
+    }
 #endif
 
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
@@ -308,11 +324,27 @@ int main(int argc, char** argv) {
     scene.draw_shadow(renderer);
     renderer.end_shadow_pass();
 
-    Mat4 view = scene.view_matrix();
     float aspect = static_cast<float>(draw_w) / static_cast<float>(draw_h > 0 ? draw_h : 1);
-
+    Mat4 view = scene.view_matrix();
     Mat4 view_left  = eye_translate(+1.f, eye_sep) * view;
     Mat4 view_right = eye_translate(-1.f, eye_sep) * view;
+    Mat4 proj_left  = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
+    Mat4 proj_right = proj_left;
+
+#if defined(__ANDROID__)
+    if (g_cardboard && g_cardboard->ok()) {
+      g_cardboard->set_screen_size(draw_w, draw_h);
+      Mat4 head = g_cardboard->head_view(0);
+      // Place the scene in front of the tracked head
+      Mat4 world = Mat4::translate({-scene.cam_pos.x, -scene.cam_pos.y, -scene.cam_pos.z});
+      Mat4 head_view = head * world;
+      view_left  = g_cardboard->eye_from_head(0) * head_view;
+      view_right = g_cardboard->eye_from_head(1) * head_view;
+      proj_left  = g_cardboard->eye_projection(0, 0.1f, 100.f);
+      proj_right = g_cardboard->eye_projection(1, 0.1f, 100.f);
+      view = head_view;
+    }
+#endif
 
     renderer.begin_frame(scene.light, scene.cam_pos);
 
@@ -328,12 +360,13 @@ int main(int argc, char** argv) {
       case StereoMode::SideBySideSwapped: {
         const bool swap = (g_stereo == StereoMode::SideBySideSwapped);
         int half_w = draw_w / 2;
-        Mat4 proj = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glViewport(0, 0, half_w, draw_h);
-        render_eye(renderer, scene, swap ? view_right : view_left, proj);
+        render_eye(renderer, scene, swap ? view_right : view_left,
+                   swap ? proj_right : proj_left);
         glViewport(half_w, 0, half_w, draw_h);
-        render_eye(renderer, scene, swap ? view_left : view_right, proj);
+        render_eye(renderer, scene, swap ? view_left : view_right,
+                   swap ? proj_left : proj_right);
         break;
       }
       case StereoMode::AnaglyphRedCyan: {

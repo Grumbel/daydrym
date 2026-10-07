@@ -129,4 +129,28 @@ struct Mat4 {
       m[2]*v.x + m[6]*v.y + m[10]*v.z
     };
   }
+
+  // Column-major from unit quaternion (x,y,z,w)
+  static Mat4 from_quat(float x, float y, float z, float w) {
+    Mat4 r{};
+    const float xx = x * x, yy = y * y, zz = z * z;
+    const float xy = x * y, xz = x * z, yz = y * z;
+    const float wx = w * x, wy = w * y, wz = w * z;
+    r.m[0] = 1.f - 2.f * (yy + zz);
+    r.m[1] = 2.f * (xy + wz);
+    r.m[2] = 2.f * (xz - wy);
+    r.m[4] = 2.f * (xy - wz);
+    r.m[5] = 1.f - 2.f * (xx + zz);
+    r.m[6] = 2.f * (yz + wx);
+    r.m[8] = 2.f * (xz + wy);
+    r.m[9] = 2.f * (yz - wx);
+    r.m[10] = 1.f - 2.f * (xx + yy);
+    return r;
+  }
+
+  static Mat4 from_gl_array(const float* a) {
+    Mat4 r{};
+    for (int i = 0; i < 16; ++i) r.m[i] = a[i];
+    return r;
+  }
 };
