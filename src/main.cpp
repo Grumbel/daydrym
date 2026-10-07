@@ -90,6 +90,18 @@ static void cycle_stereo_mode() {
   DAYDRYM_LOGI("Stereo mode: %s", stereo_mode_name(g_stereo));
 }
 
+static bool mouse_grabbed() {
+  return SDL_GetRelativeMouseMode() == SDL_TRUE;
+}
+
+static void set_mouse_grab(bool grab) {
+  if (mouse_grabbed() == grab) return;
+  SDL_SetRelativeMouseMode(grab ? SDL_TRUE : SDL_FALSE);
+  DAYDRYM_LOGI(grab ? "Mouse grabbed (Esc releases)"
+                    : "Mouse released (click to grab, Ctrl+Q quits)");
+  std::fflush(stdout);
+}
+
 static void handle_event(const SDL_Event& e, Scene& scene) {
   switch (e.type) {
     case SDL_QUIT:
@@ -121,8 +133,10 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
     case SDL_KEYDOWN:
       switch (e.key.keysym.sym) {
         case SDLK_ESCAPE:
-        case SDLK_AC_BACK:
-          g_running = false;
+          set_mouse_grab(false);
+          break;
+        case SDLK_q:
+          if (e.key.keysym.mod & KMOD_CTRL) g_running = false;
           break;
         case SDLK_v:
           cycle_stereo_mode();
@@ -132,8 +146,16 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
       }
       break;
 
+    case SDL_MOUSEBUTTONDOWN:
+      set_mouse_grab(true);  // the click that grabs is not otherwise used
+      break;
+
+    case SDL_WINDOWEVENT:
+      if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) set_mouse_grab(false);
+      break;
+
     case SDL_MOUSEMOTION:
-      if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
+      if (mouse_grabbed()) {
         const float sens = 0.0025f;
         scene.cam_yaw   += e.motion.xrel * sens;
         scene.cam_pitch -= e.motion.yrel * sens;
@@ -204,7 +226,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   SDL_GL_SetSwapInterval(1);
-  SDL_SetRelativeMouseMode(SDL_TRUE);
+  set_mouse_grab(true);
 
   int draw_w = 0, draw_h = 0;
   SDL_GL_GetDrawableSize(window, &draw_w, &draw_h);
@@ -240,6 +262,7 @@ int main(int argc, char** argv) {
 
 
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
+    const bool grabbed = mouse_grabbed();  // released = window input is paused
     float speed = 3.5f;
     Uint64 now = SDL_GetPerformanceCounter();
     float dt = static_cast<float>((now - prev) / freq);
@@ -249,12 +272,12 @@ int main(int argc, char** argv) {
     float cy = std::cos(scene.cam_yaw), sy = std::sin(scene.cam_yaw);
     Vec3 forward{sy, 0.f, -cy};
     Vec3 right{cy, 0.f, sy};
-    if (keys[SDL_SCANCODE_W]) scene.cam_pos += forward * (speed * dt);
-    if (keys[SDL_SCANCODE_S]) scene.cam_pos -= forward * (speed * dt);
-    if (keys[SDL_SCANCODE_A]) scene.cam_pos -= right * (speed * dt);
-    if (keys[SDL_SCANCODE_D]) scene.cam_pos += right * (speed * dt);
-    if (keys[SDL_SCANCODE_SPACE]) scene.cam_pos.y += speed * dt;
-    if (keys[SDL_SCANCODE_LCTRL]) scene.cam_pos.y -= speed * dt;
+    if (grabbed && keys[SDL_SCANCODE_W]) scene.cam_pos += forward * (speed * dt);
+    if (grabbed && keys[SDL_SCANCODE_S]) scene.cam_pos -= forward * (speed * dt);
+    if (grabbed && keys[SDL_SCANCODE_A]) scene.cam_pos -= right * (speed * dt);
+    if (grabbed && keys[SDL_SCANCODE_D]) scene.cam_pos += right * (speed * dt);
+    if (grabbed && keys[SDL_SCANCODE_SPACE]) scene.cam_pos.y += speed * dt;
+    if (grabbed && keys[SDL_SCANCODE_LCTRL]) scene.cam_pos.y -= speed * dt;
 
     scene.update(dt);
 

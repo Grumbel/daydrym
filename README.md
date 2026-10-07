@@ -27,7 +27,8 @@ Controls:
 - **Mouse** — look
 - **Space / Ctrl** — up / down
 - **V** — cycle stereo modes (mono → SBS → SBS swapped → anaglyph red/cyan)
-- **Esc** — quit
+- **Esc** — release the mouse (click the window to grab it again)
+- **Ctrl+Q** — quit (or close the window)
 
 ## Android / Daydream (Mirage Solo)
 
