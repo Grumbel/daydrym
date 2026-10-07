@@ -36,11 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: remove Daydream VR Core launch path (Mirage calibration crash)
-- Bundle: daydrym-022.1-no-vrcore-launch-96e286e.bundle
-  (supersedes 021.1; full history from base)
-
-## Mirage Solo note
-`com.google.vr.vrcore:compositor` aborts:
-  calibration_provider.cc Check failed: LoadCalibrationFileErrorCode::kSuccess
-That is system Google VR Services, not daydrym. Launch via adb/app drawer only.
+- Current tip: drop removed SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH
+- Bundle: daydrym-023.1-fix-sdl-hint-96e286e.bundle
+  (supersedes 022.1; full history from base)

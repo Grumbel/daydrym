@@ -201,7 +201,6 @@ int main(int argc, char** argv) {
   SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
   SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
   SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
-  SDL_SetHint(SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH, "1");
 #endif
 
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_SENSOR) != 0) {
