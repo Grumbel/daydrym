@@ -122,14 +122,20 @@ pkgs.stdenv.mkDerivation {
       SDL_INSTALL="$WORK/sdl-install-$ABI"
       mkdir -p "$SDL_BUILD" "$SDL_INSTALL"
 
+      # Use the NDK-provided toolchain file so ANDROID_NDK / cpu-features resolve.
+      TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"
+      test -f "$TOOLCHAIN_FILE"
+
+      export ANDROID_NDK_HOME="$NDK"
+      export ANDROID_NDK="$NDK"
+      export ANDROID_NDK_ROOT="$NDK"
+
       cmake -S "$WORK/SDL2" -B "$SDL_BUILD" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
+        -DANDROID_ABI="$ABI" \
+        -DANDROID_PLATFORM="android-$API" \
+        -DANDROID_STL=c++_shared \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_SYSTEM_NAME=Android \
-        -DCMAKE_ANDROID_ARCH_ABI="$ABI" \
-        -DCMAKE_ANDROID_NDK="$NDK" \
-        -DCMAKE_ANDROID_API="$API" \
-        -DCMAKE_ANDROID_STL_TYPE=c++_shared \
-        -DANDROID=ON \
         -DSDL_SHARED=ON \
         -DSDL_STATIC=OFF \
         -DSDL_TEST=OFF \
@@ -140,13 +146,11 @@ pkgs.stdenv.mkDerivation {
       APP_BUILD="$WORK/app-$ABI"
       mkdir -p "$APP_BUILD"
       cmake -S "$SRC_ROOT" -B "$APP_BUILD" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
+        -DANDROID_ABI="$ABI" \
+        -DANDROID_PLATFORM="android-$API" \
+        -DANDROID_STL=c++_shared \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_SYSTEM_NAME=Android \
-        -DCMAKE_ANDROID_ARCH_ABI="$ABI" \
-        -DCMAKE_ANDROID_NDK="$NDK" \
-        -DCMAKE_ANDROID_API="$API" \
-        -DCMAKE_ANDROID_STL_TYPE=c++_shared \
-        -DANDROID=ON \
         -DSDL2_ANDROID_PREFIX="$SDL_INSTALL"
       cmake --build "$APP_BUILD"
 
