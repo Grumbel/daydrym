@@ -88,7 +88,7 @@ float shadow_factor(vec4 sc) {
   if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
     return 1.0;
 
-  float bias = 0.003;
+  float bias = 0.002;
   float current = proj.z - bias;
 
   // 3x3 PCF
@@ -188,7 +188,7 @@ float shadow_factor(vec4 sc) {
   if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
     return 1.0;
 
-  float bias = 0.003;
+  float bias = 0.002;
   float current = proj.z - bias;
 
   float shadow = 0.0;
@@ -413,11 +413,9 @@ void Renderer::begin_shadow_pass(const Light& light, const Vec3& focus) {
   Mat4 light_proj = Mat4::ortho(-e, e, -e, e, 1.f, 60.f);
   light_view_proj_ = light_proj * light_view;
 
-  // Bias matrix: clip -> [0,1]
-  Mat4 bias{};
-  bias.m[0] = 0.5f; bias.m[5] = 0.5f; bias.m[10] = 0.5f;
-  bias.m[12] = 0.5f; bias.m[13] = 0.5f; bias.m[14] = 0.5f;
-  light_matrix_ = bias * light_view_proj_;
+  // Shader maps NDC [-1,1] -> [0,1]; do not apply a CPU bias matrix here
+  // or the transform is applied twice and shadows break.
+  light_matrix_ = light_view_proj_;
 
   glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
   glViewport(0, 0, kShadowSize, kShadowSize);

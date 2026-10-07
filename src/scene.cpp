@@ -33,25 +33,26 @@ void Scene::add_cube(std::vector<Vertex>& out, const Vec3& center,
     {center.x + half.x, center.y + half.y, center.z + half.z},
     {center.x - half.x, center.y + half.y, center.z + half.z},
   };
-  // -Z
-  add_quad(out, p[0], p[3], p[2], p[1], {0,0,-1}, color, uv_scale);
+  // Each face is CCW when viewed from outside (right-hand, outward normal)
+  // -Z (from -Z looking toward +Z)
+  add_quad(out, p[0], p[1], p[2], p[3], {0,0,-1}, color, uv_scale);
   // +Z
-  add_quad(out, p[4], p[5], p[6], p[7], {0,0, 1}, color, uv_scale);
+  add_quad(out, p[5], p[4], p[7], p[6], {0,0, 1}, color, uv_scale);
   // -X
-  add_quad(out, p[0], p[4], p[7], p[3], {-1,0,0}, color, uv_scale);
+  add_quad(out, p[4], p[0], p[3], p[7], {-1,0,0}, color, uv_scale);
   // +X
-  add_quad(out, p[1], p[2], p[6], p[5], { 1,0,0}, color, uv_scale);
+  add_quad(out, p[1], p[5], p[6], p[2], { 1,0,0}, color, uv_scale);
   // -Y
-  add_quad(out, p[0], p[1], p[5], p[4], {0,-1,0}, color, uv_scale);
+  add_quad(out, p[4], p[5], p[1], p[0], {0,-1,0}, color, uv_scale);
   // +Y
-  add_quad(out, p[3], p[7], p[6], p[2], {0, 1,0}, color, uv_scale);
+  add_quad(out, p[3], p[2], p[6], p[7], {0, 1,0}, color, uv_scale);
 }
 
 Scene::Scene() {
   light.direction = {-0.55f, -1.0f, -0.35f};
   light.color = {1.0f, 0.96f, 0.88f};
-  light.ambient = 0.20f;
-  light.intensity = 1.05f;
+  light.ambient = 0.28f;
+  light.intensity = 1.15f;
   build_geometry();
 }
 
@@ -60,8 +61,9 @@ void Scene::build_geometry() {
   {
     float s = 20.f;
     Vec3 green{0.35f, 0.55f, 0.30f};
+    // CCW when viewed from +Y so the front face is the top (with GL_CULL_FACE)
     add_quad(floor_,
-             {-s, 0.f, -s}, { s, 0.f, -s}, { s, 0.f,  s}, {-s, 0.f,  s},
+             {-s, 0.f, -s}, {-s, 0.f,  s}, { s, 0.f,  s}, { s, 0.f, -s},
              {0.f, 1.f, 0.f}, green, 8.f);
   }
 
