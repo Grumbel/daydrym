@@ -47,9 +47,23 @@ pkgs.stdenv.mkDerivation {
   ANDROID_SDK_ROOT = "${sdk}/libexec/android-sdk";
   JAVA_HOME = jdk.home;
 
-  buildPhase = ''
+  # This derivation is a custom Android pipeline; do not let stdenv/cmake
+  # auto-configure the desktop CMakeLists.txt (that path needs pkg-config).
+  dontConfigure = true;
+  dontInstall = true;
+
+  buildPhase = '' 
     set -euo pipefail
     export PATH="${jdk}/bin:$PATH"
+
+    # Unpacked flake source lives in $PWD after the unpack phase.
+    SRC_ROOT="$PWD"
+    if [ ! -f "$SRC_ROOT/CMakeLists.txt" ]; then
+      # Fallback: src attribute path
+      SRC_ROOT="${src}"
+    fi
+    echo "Source root: $SRC_ROOT"
+    test -f "$SRC_ROOT/CMakeLists.txt"
 
     # Resolve build-tools (prefer highest version directory)
     BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools"/* 2>/dev/null | sort -V | tail -1)
@@ -125,7 +139,7 @@ pkgs.stdenv.mkDerivation {
 
       APP_BUILD="$WORK/app-$ABI"
       mkdir -p "$APP_BUILD"
-      cmake -S "$src" -B "$APP_BUILD" -G Ninja \
+      cmake -S "$SRC_ROOT" -B "$APP_BUILD" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_SYSTEM_NAME=Android \
         -DCMAKE_ANDROID_ARCH_ABI="$ABI" \
@@ -156,7 +170,7 @@ pkgs.stdenv.mkDerivation {
     CLASSES="$WORK/classes"
     mkdir -p "$JAVA_OUT" "$CLASSES"
     cp -a "$WORK/SDL2/android-project/app/src/main/java/org" "$JAVA_OUT/"
-    cp -a "$src/mk/android/app/src/main/java/com" "$JAVA_OUT/"
+    cp -a "$SRC_ROOT/mk/android/app/src/main/java/com" "$JAVA_OUT/"
 
     find "$JAVA_OUT" -name '*.java' > "$WORK/sources.list"
     javac --release 11 -cp "$ANDROID_JAR" -d "$CLASSES" @"$WORK/sources.list"
@@ -171,8 +185,8 @@ pkgs.stdenv.mkDerivation {
 
     # Resources + manifest
     mkdir -p "$WORK/apk/res"
-    cp -a "$src/mk/android/app/src/main/res/." "$WORK/apk/res/"
-    cp "$src/mk/android/app/src/main/AndroidManifest.xml" "$WORK/apk/AndroidManifest.xml"
+    cp -a "$SRC_ROOT/mk/android/app/src/main/res/." "$WORK/apk/res/"
+    cp "$SRC_ROOT/mk/android/app/src/main/AndroidManifest.xml" "$WORK/apk/AndroidManifest.xml"
 
     # Package APK with aapt
     AAPT="$BUILD_TOOLS/aapt"

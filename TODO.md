@@ -36,6 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: androidenv versions + dynamic SDK path discovery
-- Bundle: daydrym-011.1-fix-android-sdk-versions-96e286e.bundle
-  (supersedes 010.1; full history from base)
+- Current tip: dontConfigure for android derivation (skip desktop cmake)
+- Bundle: daydrym-012.1-fix-android-dontconfigure-96e286e.bundle
+  (supersedes 011.1; full history from base)
