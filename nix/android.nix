@@ -181,7 +181,7 @@ pkgs.stdenv.mkDerivation {
     cp -a "$SRC_ROOT/mk/android/app/src/main/java/com" "$JAVA_OUT/"
 
     find "$JAVA_OUT" -name '*.java' > "$WORK/sources.list"
-    javac --release 11 -cp "$ANDROID_JAR" -d "$CLASSES" @"$WORK/sources.list"
+    javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$CLASSES" @"$WORK/sources.list"
 
     # jar → dex
     JAR="$WORK/classes.jar"

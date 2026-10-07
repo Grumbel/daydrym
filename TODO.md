@@ -36,6 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: SDL 2.32.8 + ALooper_pollOnce for new NDK
-- Bundle: daydrym-014.1-fix-sdl-alooper-96e286e.bundle
-  (supersedes 013.1; full history from base)
+- Current tip: javac -encoding UTF-8 for SDL Java sources
+- Bundle: daydrym-015.1-fix-javac-utf8-96e286e.bundle
+  (supersedes 014.1; full history from base)
