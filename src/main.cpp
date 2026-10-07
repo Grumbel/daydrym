@@ -7,8 +7,8 @@
 #include <SDL.h>
 #include <cstdio>
 #include <cmath>
-#  define DAYDRYM_LOGI(...) std::printf(__VA_ARGS__); std::printf("\n")
-#  define DAYDRYM_LOGE(...) std::fprintf(stderr, __VA_ARGS__); std::fprintf(stderr, "\n")
+#define DAYDRYM_LOGI(...) do { std::printf(__VA_ARGS__); std::printf("\n"); } while (0)
+#define DAYDRYM_LOGE(...) do { std::fprintf(stderr, __VA_ARGS__); std::fprintf(stderr, "\n"); } while (0)
 #include <new>
 
 #if defined(USE_GLES)
@@ -35,6 +35,49 @@ static const char* stereo_mode_name(StereoMode m) {
     case StereoMode::AnaglyphRedCyan:   return "anaglyph red/cyan";
     default:                            return "?";
   }
+}
+
+// What is actually running: build flavour, SDL, and the GL context we got.
+static void print_startup_info(SDL_Window* window, int draw_w, int draw_h) {
+  SDL_version compiled, linked;
+  SDL_VERSION(&compiled);
+  SDL_GetVersion(&linked);
+
+  int major = 0, minor = 0, profile = 0;
+  SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
+  SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
+  SDL_GL_GetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, &profile);
+  const char* profile_name = profile == SDL_GL_CONTEXT_PROFILE_ES ? "ES"
+                           : profile == SDL_GL_CONTEXT_PROFILE_CORE ? "core"
+                           : profile == SDL_GL_CONTEXT_PROFILE_COMPATIBILITY ? "compatibility"
+                           : "unknown";
+  int win_w = 0, win_h = 0;
+  SDL_GetWindowSize(window, &win_w, &win_h);
+
+  auto gl = [](GLenum name) {
+    const GLubyte* str = glGetString(name);
+    return str ? reinterpret_cast<const char*>(str) : "(null)";
+  };
+
+  DAYDRYM_LOGI("daydrym %s build (%s shaders)",
+#if defined(USE_GLES)
+               "GLES", "ES 3.00"
+#else
+               "desktop GL", "GLSL 3.30 core"
+#endif
+  );
+  DAYDRYM_LOGI("SDL:      %d.%d.%d (compiled %d.%d.%d), video driver %s",
+               linked.major, linked.minor, linked.patch,
+               compiled.major, compiled.minor, compiled.patch,
+               SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "?");
+  DAYDRYM_LOGI("Context:  OpenGL %s %d.%d, vsync %d", profile_name, major, minor,
+               SDL_GL_GetSwapInterval());
+  DAYDRYM_LOGI("GL_VENDOR:   %s", gl(GL_VENDOR));
+  DAYDRYM_LOGI("GL_RENDERER: %s", gl(GL_RENDERER));
+  DAYDRYM_LOGI("GL_VERSION:  %s", gl(GL_VERSION));
+  DAYDRYM_LOGI("GLSL:        %s", gl(GL_SHADING_LANGUAGE_VERSION));
+  DAYDRYM_LOGI("Window:   %dx%d, drawable %dx%d", win_w, win_h, draw_w, draw_h);
+  std::fflush(stdout);
 }
 
 static bool g_running = true;
@@ -166,6 +209,8 @@ int main(int argc, char** argv) {
   int draw_w = 0, draw_h = 0;
   SDL_GL_GetDrawableSize(window, &draw_w, &draw_h);
 
+  print_startup_info(window, draw_w, draw_h);
+
   Renderer renderer;
   if (!renderer.init(draw_w, draw_h)) {
     std::fprintf(stderr, "Renderer init failed\n");
@@ -179,6 +224,7 @@ int main(int argc, char** argv) {
 
   DAYDRYM_LOGI("daydrym — Blinn-Phong, shadow map, textures");
   DAYDRYM_LOGI("Stereo mode: %s", stereo_mode_name(g_stereo));
+  std::fflush(stdout);
 
   while (g_running) {
     SDL_Event e;

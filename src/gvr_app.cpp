@@ -209,6 +209,9 @@ struct App {
       renderer.reset();
     }
     have_last_frame = false;
+    LOGI("GL_VENDOR: %s, GL_RENDERER: %s", glGetString(GL_VENDOR), glGetString(GL_RENDERER));
+    LOGI("GL_VERSION: %s, GLSL: %s", glGetString(GL_VERSION),
+         glGetString(GL_SHADING_LANGUAGE_VERSION));
     LOGI("GVR GL ready, render target %dx%d", render_size.width, render_size.height);
   }
 
