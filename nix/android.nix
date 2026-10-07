@@ -97,6 +97,10 @@ pkgs.stdenv.mkDerivation {
     cp -a "$SDL_SRC" "$WORK/SDL2"
     chmod -R u+w "$WORK/SDL2"
 
+    # Newer NDKs mark ALooper_pollAll as unavailable; prefer pollOnce (SDL 2.32+
+    # already has this, but keep a safety rewrite for older trees).
+    find "$WORK/SDL2" -type f -name '*.c' -print0 | xargs -0 sed -i       's/ALooper_pollAll(/ALooper_pollOnce(/g' || true
+
     # --- Build SDL2 + daydrym for each ABI ---
     for ABI in ${lib.concatStringsSep " " abis}; do
       case "$ABI" in

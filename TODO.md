@@ -36,6 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: NDK toolchain file for SDL2 Android cmake
-- Bundle: daydrym-013.1-fix-android-ndk-toolchain-96e286e.bundle
-  (supersedes 012.1; full history from base)
+- Current tip: SDL 2.32.8 + ALooper_pollOnce for new NDK
+- Bundle: daydrym-014.1-fix-sdl-alooper-96e286e.bundle
+  (supersedes 013.1; full history from base)
