@@ -32,7 +32,7 @@ cmake --build build
 ./build/daydrym
 ```
 
-Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse (click regrabs), Ctrl+Q quit.
+Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse (click regrabs), Q quit.
 
 ## Android / Mirage Solo notes
 - Plain SDL/2D windows show up in the "2D in VR" virtual display, and a VR-mode

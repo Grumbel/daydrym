@@ -98,7 +98,7 @@ static void set_mouse_grab(bool grab) {
   if (mouse_grabbed() == grab) return;
   SDL_SetRelativeMouseMode(grab ? SDL_TRUE : SDL_FALSE);
   DAYDRYM_LOGI(grab ? "Mouse grabbed (Esc releases)"
-                    : "Mouse released (click to grab, Ctrl+Q quits)");
+                    : "Mouse released (click to grab, Q quits)");
   std::fflush(stdout);
 }
 
@@ -136,7 +136,7 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
           set_mouse_grab(false);
           break;
         case SDLK_q:
-          if (e.key.keysym.mod & KMOD_CTRL) g_running = false;
+          g_running = false;
           break;
         case SDLK_v:
           cycle_stereo_mode();
