@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 
 static const char* kDepthVertES = R"(#version 300 es
-precision mediump float;
+precision highp float;  // mediump (fp16) breaks shadow depth comparisons
 layout(location = 0) in vec3 a_pos;
 uniform mat4 u_mvp;
 void main() {
@@ -28,12 +28,12 @@ void main() {
 )";
 
 static const char* kDepthFragES = R"(#version 300 es
-precision mediump float;
+precision highp float;  // mediump (fp16) breaks shadow depth comparisons
 void main() {}
 )";
 
 static const char* kLitVertES = R"(#version 300 es
-precision mediump float;
+precision highp float;  // mediump (fp16) breaks shadow depth comparisons
 layout(location = 0) in vec3 a_pos;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec2 a_uv;
@@ -63,7 +63,7 @@ void main() {
 )";
 
 static const char* kLitFragES = R"(#version 300 es
-precision mediump float;
+precision highp float;  // mediump (fp16) breaks shadow depth comparisons
 in vec3 v_world_pos;
 in vec3 v_normal;
 in vec2 v_uv;
@@ -334,8 +334,10 @@ bool Renderer::create_shadow_map() {
   glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
                kShadowSize, kShadowSize, 0,
                GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  // Depth textures are not filterable in ES 3 (without compare mode, a LINEAR
+  // texture is incomplete and samples as 0); the shader does its own PCF.
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   // Compare mode not required; we sample depth manually in the shader
