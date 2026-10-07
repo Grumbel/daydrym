@@ -7,6 +7,7 @@
 #include <SDL.h>
 #include <cstdio>
 #include <cmath>
+#include <new>
 
 #if defined(USE_GLES) || defined(__ANDROID__)
 #  include <GLES3/gl3.h>
@@ -35,51 +36,96 @@ static const char* stereo_mode_name(StereoMode m) {
 }
 
 static bool g_running = true;
+static bool g_paused = false;
 #if defined(__ANDROID__)
-static StereoMode g_stereo = StereoMode::SideBySide; // phone VR default
+// Phone / Daydream View: always start in SBS. Anaglyph is desktop-only.
+static StereoMode g_stereo = StereoMode::SideBySide;
 #else
 static StereoMode g_stereo = StereoMode::Mono;
 #endif
 
-static void handle_event(const SDL_Event& e, Scene& scene) {
-  if (e.type == SDL_QUIT || e.type == SDL_APP_TERMINATING) {
-    g_running = false;
-  } else if (e.type == SDL_KEYDOWN) {
-    switch (e.key.keysym.sym) {
-      case SDLK_ESCAPE:
-      case SDLK_AC_BACK:
-        g_running = false;
-        break;
-      case SDLK_v: {
-        int next = (static_cast<int>(g_stereo) + 1) % static_cast<int>(StereoMode::Count);
-        g_stereo = static_cast<StereoMode>(next);
-        std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
-        break;
-      }
-      default:
-        break;
-    }
-  } else if (e.type == SDL_MOUSEMOTION && (SDL_GetRelativeMouseMode() == SDL_TRUE)) {
-#if !defined(__ANDROID__)
-    const float sens = 0.0025f;
-    scene.cam_yaw   += e.motion.xrel * sens;
-    scene.cam_pitch -= e.motion.yrel * sens;
-    const float lim = 1.4f;
-    if (scene.cam_pitch >  lim) scene.cam_pitch = lim;
-    if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
-#else
-    (void)scene;
-#endif
-  } else if (e.type == SDL_FINGERDOWN || e.type == SDL_MOUSEBUTTONDOWN) {
-    // Tap cycles stereo mode on touch devices
+static void cycle_stereo_mode() {
 #if defined(__ANDROID__)
-    int next = (static_cast<int>(g_stereo) + 1) % static_cast<int>(StereoMode::Count);
-    g_stereo = static_cast<StereoMode>(next);
-    std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
+  // Only cycle modes that work in a headset: SBS <-> SBS swapped.
+  // (Tap / controller click used to walk into anaglyph and look "broken".)
+  if (g_stereo == StereoMode::SideBySide)
+    g_stereo = StereoMode::SideBySideSwapped;
+  else
+    g_stereo = StereoMode::SideBySide;
 #else
-    (void)e;
+  int next = (static_cast<int>(g_stereo) + 1) % static_cast<int>(StereoMode::Count);
+  g_stereo = static_cast<StereoMode>(next);
 #endif
+  std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
+}
+
+static void handle_event(const SDL_Event& e, Scene& scene) {
+  switch (e.type) {
+    case SDL_QUIT:
+    case SDL_APP_TERMINATING:
+      g_running = false;
+      break;
+
+    case SDL_APP_WILLENTERBACKGROUND:
+    case SDL_APP_DIDENTERBACKGROUND:
+      g_paused = true;
+      std::printf("Paused (background)\n");
+      break;
+
+    case SDL_APP_WILLENTERFOREGROUND:
+      break;
+
+    case SDL_APP_DIDENTERFOREGROUND:
+      g_paused = false;
+#if defined(__ANDROID__)
+      // Re-assert headset-friendly stereo after returning from the VR menu / launcher
+      g_stereo = StereoMode::SideBySide;
+#endif
+      std::printf("Resumed (foreground), stereo=%s\n", stereo_mode_name(g_stereo));
+      break;
+
+    case SDL_KEYDOWN:
+      switch (e.key.keysym.sym) {
+        case SDLK_ESCAPE:
+        case SDLK_AC_BACK:
+          g_running = false;
+          break;
+        case SDLK_v:
+          cycle_stereo_mode();
+          break;
+        default:
+          break;
+      }
+      break;
+
+#if !defined(__ANDROID__)
+    case SDL_MOUSEMOTION:
+      if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
+        const float sens = 0.0025f;
+        scene.cam_yaw   += e.motion.xrel * sens;
+        scene.cam_pitch -= e.motion.yrel * sens;
+        const float lim = 1.4f;
+        if (scene.cam_pitch >  lim) scene.cam_pitch = lim;
+        if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
+      }
+      break;
+#endif
+
+#if defined(__ANDROID__)
+    // Do NOT cycle stereo on every finger/controller click — that pushed
+    // users into anaglyph. Long-press or V (USB keyboard) can still cycle.
+    case SDL_FINGERDOWN:
+    case SDL_MOUSEBUTTONDOWN:
+      (void)e;
+      break;
+#endif
+
+    default:
+      break;
   }
+#if !defined(__ANDROID__)
+  (void)scene;
+#endif
 }
 
 static Mat4 eye_translate(float sep_sign, float eye_sep) {
@@ -92,32 +138,16 @@ static void render_eye(Renderer& renderer, Scene& scene,
 }
 
 #if defined(__ANDROID__)
-// Apply device orientation (rotation vector / accel+gyro fusion via SDL)
 static void update_camera_from_sensors(Scene& scene) {
-  int count = SDL_NumSensors();
-  for (int i = 0; i < count; ++i) {
-    SDL_SensorType type = SDL_SensorGetDeviceType(i);
-    if (type != SDL_SENSOR_ACCEL && type != SDL_SENSOR_GYRO)
-      continue;
-    SDL_Sensor* s = SDL_SensorOpen(i);
-    (void)s;
-  }
-
-  // Prefer accelerometer tilt for pitch + simple gyro integration is heavy;
-  // use accel for pitch/roll-style look suitable for a cardboard viewer held in landscape.
+  const int count = SDL_NumSensors();
   for (int i = 0; i < count; ++i) {
     if (SDL_SensorGetDeviceType(i) != SDL_SENSOR_ACCEL)
       continue;
-    SDL_Sensor* accel = SDL_SensorFromInstanceID(SDL_SensorGetDeviceInstanceID(i));
-    if (!accel) {
-      accel = SDL_SensorOpen(i);
-    }
+    SDL_Sensor* accel = SDL_SensorOpen(i);
     if (!accel) continue;
     float data[3] = {0, 0, 0};
     if (SDL_SensorGetData(accel, data, 3) == 0) {
-      // Landscape: x along device long edge roughly; map gravity to look angles
       float ax = data[0], ay = data[1], az = data[2];
-      // Pitch from forward tilt, yaw from side tilt (viewer resting on face)
       scene.cam_pitch = std::atan2(-az, std::sqrt(ax * ax + ay * ay));
       scene.cam_yaw   = std::atan2(ax, ay);
       const float lim = 1.4f;
@@ -127,13 +157,24 @@ static void update_camera_from_sensors(Scene& scene) {
     break;
   }
 }
+
+static void android_set_immersive(SDL_Window* window) {
+  SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+  // Hide system UI as much as SDL allows
+  SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+}
 #endif
 
 int main(int argc, char** argv) {
   (void)argc; (void)argv;
 
+  SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
+#if defined(__ANDROID__)
+  SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+  SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
+
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_SENSOR) != 0) {
-    // Sensors optional
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
       std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
       return 1;
@@ -176,6 +217,8 @@ int main(int argc, char** argv) {
   SDL_GL_SetSwapInterval(1);
 #if !defined(__ANDROID__)
   SDL_SetRelativeMouseMode(SDL_TRUE);
+#else
+  android_set_immersive(window);
 #endif
 
   int draw_w = 0, draw_h = 0;
@@ -193,12 +236,18 @@ int main(int argc, char** argv) {
   const float eye_sep = 0.065f;
 
   std::printf("daydrym — Blinn-Phong, shadow map, textures\n");
-  std::printf("Stereo mode: %s (V or tap to cycle)\n", stereo_mode_name(g_stereo));
+  std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
 
   while (g_running) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       handle_event(e, scene);
+    }
+
+    if (g_paused) {
+      SDL_Delay(50);
+      prev = SDL_GetPerformanceCounter();
+      continue;
     }
 
 #if defined(__ANDROID__)
@@ -225,8 +274,34 @@ int main(int argc, char** argv) {
     scene.update(dt);
 
     SDL_GL_GetDrawableSize(window, &draw_w, &draw_h);
+    if (draw_w <= 0 || draw_h <= 0) {
+      SDL_Delay(16);
+      continue;
+    }
     if (draw_w != renderer.width() || draw_h != renderer.height()) {
       renderer.resize(draw_w, draw_h);
+    }
+
+    // Make sure the GL context is current after resume
+    if (SDL_GL_MakeCurrent(window, ctx) != 0) {
+      std::fprintf(stderr, "SDL_GL_MakeCurrent failed: %s — recreating context\n",
+                   SDL_GetError());
+      if (ctx) SDL_GL_DeleteContext(ctx);
+      ctx = SDL_GL_CreateContext(window);
+      if (!ctx) {
+        std::fprintf(stderr, "context recreate failed: %s\n", SDL_GetError());
+        SDL_Delay(100);
+        continue;
+      }
+      SDL_GL_SetSwapInterval(1);
+      // Full GPU resource rebuild
+      renderer.~Renderer();
+      new (&renderer) Renderer();
+      if (!renderer.init(draw_w, draw_h)) {
+        std::fprintf(stderr, "renderer re-init failed\n");
+        SDL_Delay(100);
+        continue;
+      }
     }
 
     renderer.begin_shadow_pass(scene.light, {0.f, 1.f, -2.f});
@@ -282,7 +357,7 @@ int main(int argc, char** argv) {
     SDL_GL_SwapWindow(window);
   }
 
-  SDL_GL_DeleteContext(ctx);
+  if (ctx) SDL_GL_DeleteContext(ctx);
   SDL_DestroyWindow(window);
   SDL_Quit();
   return 0;
