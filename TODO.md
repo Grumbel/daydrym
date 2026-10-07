@@ -36,6 +36,11 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: force landscape on Mirage Solo; pause on SDL_QUIT
-- Bundle: daydrym-021.1-fix-mirage-landscape-96e286e.bundle
-  (supersedes 020.1; full history from base)
+- Current tip: remove Daydream VR Core launch path (Mirage calibration crash)
+- Bundle: daydrym-022.1-no-vrcore-launch-96e286e.bundle
+  (supersedes 021.1; full history from base)
+
+## Mirage Solo note
+`com.google.vr.vrcore:compositor` aborts:
+  calibration_provider.cc Check failed: LoadCalibrationFileErrorCode::kSuccess
+That is system Google VR Services, not daydrym. Launch via adb/app drawer only.

@@ -8,6 +8,14 @@
 #include <SDL.h>
 #include <cstdio>
 #include <cmath>
+#if defined(__ANDROID__)
+#  include <android/log.h>
+#  define DAYDRYM_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "daydrym", __VA_ARGS__)
+#  define DAYDRYM_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "daydrym", __VA_ARGS__)
+#else
+#  define DAYDRYM_LOGI(...) std::printf(__VA_ARGS__); std::printf("\n")
+#  define DAYDRYM_LOGE(...) std::fprintf(stderr, __VA_ARGS__); std::fprintf(stderr, "\n")
+#endif
 #include <new>
 
 #if defined(USE_GLES) || defined(__ANDROID__)
@@ -58,7 +66,7 @@ static void cycle_stereo_mode() {
   int next = (static_cast<int>(g_stereo) + 1) % static_cast<int>(StereoMode::Count);
   g_stereo = static_cast<StereoMode>(next);
 #endif
-  std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
+  DAYDRYM_LOGI("Stereo mode: %s", stereo_mode_name(g_stereo));
 }
 
 static void handle_event(const SDL_Event& e, Scene& scene) {
@@ -236,7 +244,7 @@ int main(int argc, char** argv) {
   // Hard-lock landscape after create (Mirage was ending up in portrait)
   SDL_SetWindowDisplayMode(window, nullptr);
   SDL_GetWindowSize(window, &win_w, &win_h);
-  std::printf("Window after create: %dx%d\n", win_w, win_h);
+  DAYDRYM_LOGI("Window after create: %dx%d", win_w, win_h);
 #endif
 
   SDL_GLContext ctx = SDL_GL_CreateContext(window);
@@ -264,10 +272,10 @@ int main(int argc, char** argv) {
   g_cardboard = &cardboard;
 #if defined(__ANDROID__)
   if (cardboard.init(draw_w, draw_h)) {
-    std::printf("Cardboard SDK active (head tracking + lens eye matrices)\n");
+    DAYDRYM_LOGI("Cardboard SDK active (head tracking + lens eye matrices)");
     g_stereo = StereoMode::SideBySide;
   } else {
-    std::printf("Cardboard SDK unavailable — fallback head tracking\n");
+    DAYDRYM_LOGI("Cardboard SDK unavailable — fallback head tracking");
   }
 #endif
 
@@ -276,8 +284,8 @@ int main(int argc, char** argv) {
   const double freq = static_cast<double>(SDL_GetPerformanceFrequency());
   const float eye_sep = 0.065f;
 
-  std::printf("daydrym — Blinn-Phong, shadow map, textures\n");
-  std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
+  DAYDRYM_LOGI("daydrym — Blinn-Phong, shadow map, textures");
+  DAYDRYM_LOGI("Stereo mode: %s", stereo_mode_name(g_stereo));
 
   while (g_running) {
     SDL_Event e;
