@@ -64,6 +64,16 @@ static void cycle_stereo_mode() {
 static void handle_event(const SDL_Event& e, Scene& scene) {
   switch (e.type) {
     case SDL_QUIT:
+      // On Android, surfaceDestroyed often synthesizes SDL_QUIT. Treat as pause
+      // so the process can resume when the VR compositor gives us a surface again.
+#if defined(__ANDROID__)
+      g_paused = true;
+      if (g_cardboard) g_cardboard->pause();
+      std::printf("SDL_QUIT while on Android — pausing instead of exiting\n");
+#else
+      g_running = false;
+#endif
+      break;
     case SDL_APP_TERMINATING:
       g_running = false;
       break;
@@ -85,6 +95,11 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
       if (g_cardboard) g_cardboard->resume();
 #endif
       std::printf("Resumed (foreground), stereo=%s\n", stereo_mode_name(g_stereo));
+      break;
+
+    case SDL_RENDER_DEVICE_RESET:
+    case SDL_RENDER_TARGETS_RESET:
+      std::printf("GL device/targets reset — will recreate on next frame\n");
       break;
 
     case SDL_KEYDOWN:
@@ -173,8 +188,12 @@ int main(int argc, char** argv) {
 
   SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
 #if defined(__ANDROID__)
+  // Mirage Solo / Daydream: stay landscape. SDL was flipping to portrait
+  // (1440x2560) via requestedOrientation=FULL_USER and then the activity died.
+  SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
   SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
   SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+  SDL_SetHint(SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH, "1");
 #endif
 
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_SENSOR) != 0) {
@@ -197,9 +216,11 @@ int main(int argc, char** argv) {
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
   int win_w = 1280, win_h = 720;
-  Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+  Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
 #if defined(__ANDROID__)
   flags |= SDL_WINDOW_FULLSCREEN;
+#else
+  flags |= SDL_WINDOW_RESIZABLE;
 #endif
 
   SDL_Window* window = SDL_CreateWindow(
@@ -211,6 +232,12 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
     return 1;
   }
+#if defined(__ANDROID__)
+  // Hard-lock landscape after create (Mirage was ending up in portrait)
+  SDL_SetWindowDisplayMode(window, nullptr);
+  SDL_GetWindowSize(window, &win_w, &win_h);
+  std::printf("Window after create: %dx%d\n", win_w, win_h);
+#endif
 
   SDL_GLContext ctx = SDL_GL_CreateContext(window);
   if (!ctx) {

@@ -36,6 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: link GfxPluginCardboard (not cardboard_api)
-- Bundle: daydrym-020.1-fix-cardboard-libname-96e286e.bundle
-  (supersedes 019.1; full history from base)
+- Current tip: force landscape on Mirage Solo; pause on SDL_QUIT
+- Bundle: daydrym-021.1-fix-mirage-landscape-96e286e.bundle
+  (supersedes 020.1; full history from base)
