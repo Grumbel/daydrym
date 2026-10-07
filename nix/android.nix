@@ -163,13 +163,21 @@ pkgs.stdenv.mkDerivation {
       cp -v "$SDL_INSTALL/lib/"*.so "$LIBDIR/" || true
       # CMake may put libmain.so in app build dir
       find "$APP_BUILD" -name 'libmain.so' -exec cp -v {} "$LIBDIR/" \;
-      # libc++_shared
-      CPP_SHARED=$(find "$NDK/toolchains/llvm/prebuilt/$HOST_TAG/sysroot/usr/lib" -name 'libc++_shared.so' | grep "$TARGET_TRIPLE\|aarch64\|arm" | head -1 || true)
+      # libc++_shared must match the ABI (do not pick armeabi for arm64)
+      case "$ABI" in
+        arm64-v8a)   CPP_ARCH="aarch64-linux-android" ;;
+        armeabi-v7a) CPP_ARCH="arm-linux-androideabi" ;;
+        x86_64)      CPP_ARCH="x86_64-linux-android" ;;
+        *)           CPP_ARCH="$TARGET_TRIPLE" ;;
+      esac
+      CPP_SHARED=$(find "$NDK/toolchains/llvm/prebuilt/$HOST_TAG/sysroot/usr/lib/$CPP_ARCH" -name 'libc++_shared.so' 2>/dev/null | head -1 || true)
       if [ -z "$CPP_SHARED" ]; then
-        CPP_SHARED=$(find "$NDK" -name 'libc++_shared.so' | grep "$ABI\|aarch64-linux-android" | head -1 || true)
+        CPP_SHARED=$(find "$NDK" -path "*$CPP_ARCH*" -name 'libc++_shared.so' 2>/dev/null | head -1 || true)
       fi
       if [ -n "$CPP_SHARED" ]; then
         cp -v "$CPP_SHARED" "$LIBDIR/"
+      else
+        echo "WARNING: libc++_shared.so not found for $CPP_ARCH"
       fi
     done
 
