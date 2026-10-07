@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
+-->
 <resources>
     <string name="app_name">daydrym</string>
 </resources>

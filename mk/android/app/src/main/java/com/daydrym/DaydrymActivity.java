@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
 package com.daydrym;
 
 import android.app.Activity;

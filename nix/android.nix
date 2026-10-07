@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
 # Android APK packaging for daydrym (Google VR NDK + GLES3).
 # Produces a debug-signed APK for arm64-v8a (and optionally armeabi-v7a).
 { pkgs

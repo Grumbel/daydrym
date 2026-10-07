@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.daydrym"
     android:versionCode="3"

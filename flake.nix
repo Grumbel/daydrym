@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
 {
   description = "daydrym — GLES3/OpenGL VR-style hello world (house + cubes). Desktop + Android APK.";
 

@@ -67,4 +67,4 @@ buttons as you use them. See `mk/android/README.md` for packaging details.
 
 ## License
 
-GPL-3.0-or-later. See `LICENSE` and SPDX headers in source files.
+GPL-3.0-or-later. See `LICENSES/` and the SPDX headers in source files.
