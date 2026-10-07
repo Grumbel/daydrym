@@ -34,5 +34,6 @@ cmake --build build
 Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
-- Base commit: (will be set on first commit)
-- Next bundle: gles-vr-hello-001.1-…
+- Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
+- Current tip: same (initial)
+- Bundle: gles-vr-hello-001.1-initial-desktop-96e286e.bundle

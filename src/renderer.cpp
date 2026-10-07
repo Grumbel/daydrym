@@ -9,11 +9,9 @@
 #if defined(USE_GLES) || defined(__ANDROID__)
 #  include <GLES3/gl3.h>
 #else
+#  define GL_GLEXT_PROTOTYPES 1
 #  include <GL/gl.h>
-// Minimal subset of GL 3.3 core if the system headers are incomplete
-#  ifndef GL_VERTEX_SHADER
-#    error "Desktop OpenGL headers incomplete; install mesa-libGL-devel or similar"
-#  endif
+#  include <GL/glext.h>
 #endif
 
 static const char* kVertSrc = R"(#version 300 es

@@ -11,7 +11,9 @@
 #if defined(USE_GLES) || defined(__ANDROID__)
 #  include <GLES3/gl3.h>
 #else
+#  define GL_GLEXT_PROTOTYPES 1
 #  include <GL/gl.h>
+#  include <GL/glext.h>
 #endif
 
 static bool g_running = true;
