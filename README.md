@@ -21,7 +21,7 @@ Controls:
 - **WASD** — move
 - **Mouse** — look
 - **Space / Ctrl** — up / down
-- **V** — toggle side-by-side stereo
+- **V** — cycle stereo modes (mono → SBS → SBS swapped → anaglyph red/cyan)
 - **Esc** — quit
 
 ## Status

@@ -38,6 +38,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: fix ground culling + shadow bias double-transform
-- Bundle: daydrym-005.1-fix-ground-shadows-96e286e.bundle
-  (supersedes 004.1; full history from base)
+- Current tip: V cycles stereo modes (mono / SBS / SBS swap / anaglyph)
+- Bundle: daydrym-006.1-stereo-modes-96e286e.bundle
+  (supersedes 005.1; full history from base)

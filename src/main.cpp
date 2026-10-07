@@ -16,17 +16,43 @@
 #  include <GL/glext.h>
 #endif
 
+enum class StereoMode {
+  Mono = 0,
+  SideBySide,
+  SideBySideSwapped,
+  AnaglyphRedCyan,
+  Count
+};
+
+static const char* stereo_mode_name(StereoMode m) {
+  switch (m) {
+    case StereoMode::Mono:              return "mono";
+    case StereoMode::SideBySide:        return "side-by-side";
+    case StereoMode::SideBySideSwapped: return "side-by-side (L/R swapped)";
+    case StereoMode::AnaglyphRedCyan:   return "anaglyph red/cyan";
+    default:                            return "?";
+  }
+}
+
 static bool g_running = true;
-static bool g_stereo = false;
+static StereoMode g_stereo = StereoMode::Mono;
 
 static void handle_event(const SDL_Event& e, Scene& scene) {
   if (e.type == SDL_QUIT) {
     g_running = false;
   } else if (e.type == SDL_KEYDOWN) {
     switch (e.key.keysym.sym) {
-      case SDLK_ESCAPE: g_running = false; break;
-      case SDLK_v: g_stereo = !g_stereo; break;
-      default: break;
+      case SDLK_ESCAPE:
+        g_running = false;
+        break;
+      case SDLK_v: {
+        int next = (static_cast<int>(g_stereo) + 1) % static_cast<int>(StereoMode::Count);
+        g_stereo = static_cast<StereoMode>(next);
+        std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
+        break;
+      }
+      default:
+        break;
     }
   } else if (e.type == SDL_MOUSEMOTION && (SDL_GetRelativeMouseMode() == SDL_TRUE)) {
     const float sens = 0.0025f;
@@ -36,6 +62,14 @@ static void handle_event(const SDL_Event& e, Scene& scene) {
     if (scene.cam_pitch >  lim) scene.cam_pitch = lim;
     if (scene.cam_pitch < -lim) scene.cam_pitch = -lim;
   }
+}
+
+static Mat4 eye_translate(float sep_sign, float eye_sep) {
+  // Positive sep_sign shifts camera toward +X (right); for left eye use +0.5 * sep
+  // Convention: left eye is at -eye_sep/2 in camera space after view, approximated
+  // by translating world opposite before view: +offset for left when looking -Z...
+  // We apply a simple horizontal offset in view space via a pre-view translation.
+  return Mat4::translate({sep_sign * eye_sep * 0.5f, 0.f, 0.f});
 }
 
 static void render_eye(Renderer& renderer, Scene& scene,
@@ -65,7 +99,7 @@ int main(int argc, char** argv) {
 
   int win_w = 1280, win_h = 720;
   SDL_Window* window = SDL_CreateWindow(
-      "daydrym — lighting, shadows, textures (V = stereo)",
+      "daydrym — V cycles stereo modes",
       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
       win_w, win_h,
       SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -95,9 +129,12 @@ int main(int argc, char** argv) {
   Scene scene;
   Uint64 prev = SDL_GetPerformanceCounter();
   const double freq = static_cast<double>(SDL_GetPerformanceFrequency());
+  const float eye_sep = 0.065f;
 
-  std::printf("daydrym — Blinn-Phong lighting, shadow map, textured geometry\n");
-  std::printf("Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit\n");
+  std::printf("daydrym — Blinn-Phong, shadow map, textures\n");
+  std::printf("Controls: WASD move, mouse look, Space/Ctrl up/down\n");
+  std::printf("          V = cycle stereo mode, Esc = quit\n");
+  std::printf("Stereo mode: %s\n", stereo_mode_name(g_stereo));
 
   while (g_running) {
     SDL_Event e;
@@ -129,34 +166,67 @@ int main(int argc, char** argv) {
       renderer.resize(draw_w, draw_h);
     }
 
-    // --- Shadow pass ---
+    // Shadow pass (shared; mono camera is good enough for the light)
     renderer.begin_shadow_pass(scene.light, {0.f, 1.f, -2.f});
     scene.draw_shadow(renderer);
     renderer.end_shadow_pass();
 
-    // --- Lit pass ---
     Mat4 view = scene.view_matrix();
     float aspect = static_cast<float>(draw_w) / static_cast<float>(draw_h > 0 ? draw_h : 1);
 
+    // Left eye = camera shifted right in world before view (sep +), right eye opposite
+    Mat4 view_left  = eye_translate(+1.f, eye_sep) * view;
+    Mat4 view_right = eye_translate(-1.f, eye_sep) * view;
+
     renderer.begin_frame(scene.light, scene.cam_pos);
 
-    if (g_stereo) {
-      float eye_sep = 0.065f;
-      int half_w = draw_w / 2;
+    switch (g_stereo) {
+      case StereoMode::Mono: {
+        glViewport(0, 0, draw_w, draw_h);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        Mat4 proj = Mat4::perspective(1.0f, aspect, 0.1f, 100.f);
+        render_eye(renderer, scene, view, proj);
+        break;
+      }
+      case StereoMode::SideBySide:
+      case StereoMode::SideBySideSwapped: {
+        const bool swap = (g_stereo == StereoMode::SideBySideSwapped);
+        int half_w = draw_w / 2;
+        Mat4 proj = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
 
-      glViewport(0, 0, half_w, draw_h);
-      Mat4 proj_l = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
-      Mat4 eye_l = Mat4::translate({ eye_sep * 0.5f, 0.f, 0.f});
-      render_eye(renderer, scene, eye_l * view, proj_l);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-      glViewport(half_w, 0, half_w, draw_h);
-      Mat4 proj_r = Mat4::perspective(1.0f, aspect * 0.5f, 0.1f, 100.f);
-      Mat4 eye_r = Mat4::translate({-eye_sep * 0.5f, 0.f, 0.f});
-      render_eye(renderer, scene, eye_r * view, proj_r);
-    } else {
-      glViewport(0, 0, draw_w, draw_h);
-      Mat4 proj = Mat4::perspective(1.0f, aspect, 0.1f, 100.f);
-      render_eye(renderer, scene, view, proj);
+        // Left half of the window
+        glViewport(0, 0, half_w, draw_h);
+        render_eye(renderer, scene, swap ? view_right : view_left, proj);
+
+        // Right half
+        glViewport(half_w, 0, half_w, draw_h);
+        render_eye(renderer, scene, swap ? view_left : view_right, proj);
+        break;
+      }
+      case StereoMode::AnaglyphRedCyan: {
+        // Full-frame anaglyph: left → red, right → cyan (G+B)
+        Mat4 proj = Mat4::perspective(1.0f, aspect, 0.1f, 100.f);
+        glViewport(0, 0, draw_w, draw_h);
+
+        // Left eye into red channel
+        glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE);
+        glDepthFunc(GL_LESS);
+        render_eye(renderer, scene, view_left, proj);
+
+        // Right eye into green+blue; allow equal depth so both eyes composite
+        glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glDepthFunc(GL_LEQUAL);
+        render_eye(renderer, scene, view_right, proj);
+
+        // Restore defaults for next frame / UI
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glDepthFunc(GL_LESS);
+        break;
+      }
+      default:
+        break;
     }
 
     renderer.end_frame();
