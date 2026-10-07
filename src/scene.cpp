@@ -5,20 +5,16 @@
 
 void Scene::add_quad(std::vector<Vertex>& out,
                      const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d,
-                     const Vec3& /*normal_hint*/, const Vec3& color, float uv_scale) {
-  // Derive a single flat normal from the first triangle so lighting always
-  // matches the winding (CCW → normal toward the viewer of that face).
-  Vec3 e1 = b - a;
-  Vec3 e2 = c - a;
-  Vec3 normal = cross(e1, e2).normalized();
-
+                     const Vec3& normal, const Vec3& color, float uv_scale) {
+  // Explicit normal (outward). Vertices MUST be CCW when viewed from outside
+  // (i.e. looking along -normal).
+  const Vec3 n = normal.normalized();
   auto push = [&](const Vec3& p, float u, float v) {
     out.push_back({p.x, p.y, p.z,
-                   normal.x, normal.y, normal.z,
+                   n.x, n.y, n.z,
                    u * uv_scale, v * uv_scale,
                    color.x, color.y, color.z});
   };
-  // a-b-c and a-c-d
   push(a, 0.f, 0.f);
   push(b, 1.f, 0.f);
   push(c, 1.f, 1.f);
@@ -29,49 +25,33 @@ void Scene::add_quad(std::vector<Vertex>& out,
 
 void Scene::add_cube(std::vector<Vertex>& out, const Vec3& center,
                      const Vec3& half, const Vec3& color, float uv_scale) {
-  // Corner indices:
-  //   0 (-x,-y,-z)  1 (+x,-y,-z)  2 (+x,+y,-z)  3 (-x,+y,-z)
-  //   4 (-x,-y,+z)  5 (+x,-y,+z)  6 (+x,+y,+z)  7 (-x,+y,+z)
-  Vec3 p[8] = {
-    {center.x - half.x, center.y - half.y, center.z - half.z},
-    {center.x + half.x, center.y - half.y, center.z - half.z},
-    {center.x + half.x, center.y + half.y, center.z - half.z},
-    {center.x - half.x, center.y + half.y, center.z - half.z},
-    {center.x - half.x, center.y - half.y, center.z + half.z},
-    {center.x + half.x, center.y - half.y, center.z + half.z},
-    {center.x + half.x, center.y + half.y, center.z + half.z},
-    {center.x - half.x, center.y + half.y, center.z + half.z},
-  };
+  const float x = half.x, y = half.y, z = half.z;
+  const float cx = center.x, cy = center.y, cz = center.z;
 
-  // Each face listed CCW when viewed from *outside* the cube.
-  // Normal is computed from winding in add_quad (hint ignored).
-  const Vec3 dummy{0, 0, 0};
+  // 8 corners
+  const Vec3 p000{cx - x, cy - y, cz - z};
+  const Vec3 p001{cx - x, cy - y, cz + z};
+  const Vec3 p010{cx - x, cy + y, cz - z};
+  const Vec3 p011{cx - x, cy + y, cz + z};
+  const Vec3 p100{cx + x, cy - y, cz - z};
+  const Vec3 p101{cx + x, cy - y, cz + z};
+  const Vec3 p110{cx + x, cy + y, cz - z};
+  const Vec3 p111{cx + x, cy + y, cz + z};
 
-  // -Z (outward normal -Z): view from -Z, x→right y→up → p0,p1,p2,p3
-  add_quad(out, p[0], p[1], p[2], p[3], dummy, color, uv_scale);
-  // +Z: view from +Z, x→right y→up → p5,p4,p7,p6  (mirror of -Z)
-  // From +Z looking -Z: +x is left on screen… use p4,p5,p6,p7 with care.
-  // Viewed from outside (+Z side looking toward -Z): world +x is to the viewer's left.
-  // Simpler: walk the boundary so cross((b-a),(c-a)) points +Z.
-  // a=p4 (-x,-y,+z), b=p5 (+x,-y,+z), c=p6 (+x,+y,+z):
-  //   e1=(+2x,0,0), e2=(+2x,+2y,0) wait e2 from a to c = (2x,2y,0)
-  //   cross = (0,0, 2x*2y - 0) = (0,0, positive) → +Z. Good: p4,p5,p6,p7
-  add_quad(out, p[4], p[5], p[6], p[7], dummy, color, uv_scale);
-  // -X: outward -X. a=p0, b=p3, c=p7, d=p4
-  // e1 = p3-p0 = (0,2y,0), e2 = p7-p0 = (0,2y,2z) → cross = (2y*2z, 0, 0) wait
-  // cross((0,2y,0),(0,2y,2z)) = (4y*z - 0, 0-0, 0-0) = (4yz, 0, 0) — sign depends.
-  // Use: p0, p4, p7, p3 — e1=p4-p0=(0,0,2z), e2=p7-p0=(0,2y,2z)
-  // cross = (0*2z - 2z*2y, 2z*0 - 0*0, 0*2y - 0*0) = (-4yz, 0, 0) → -X if y,z>0
-  add_quad(out, p[0], p[4], p[7], p[3], dummy, color, uv_scale);
-  // +X: p1, p2, p6, p5
-  // e1=p2-p1=(0,2y,0), e2=p6-p1=(0,2y,2z) → cross=(4yz,0,0) → +X
-  add_quad(out, p[1], p[2], p[6], p[5], dummy, color, uv_scale);
-  // -Y: p0, p1, p5, p4
-  // e1=p1-p0=(2x,0,0), e2=p5-p0=(2x,0,2z) → cross=(0, -4xz, 0) → -Y
-  add_quad(out, p[0], p[1], p[5], p[4], dummy, color, uv_scale);
-  // +Y: p3, p7, p6, p2
-  // e1=p7-p3=(0,0,2z), e2=p6-p3=(2x,0,2z) → cross=(2z*0-0*2x, 2z*2x-0*0, 0-0)=(0,4zx,0) → +Y
-  add_quad(out, p[3], p[7], p[6], p[2], dummy, color, uv_scale);
+  // Each face: CCW when viewed from outside; normal is explicit outward.
+  // Orders verified so cross(b-a, c-a) points along the given normal.
+  // -X
+  add_quad(out, p001, p011, p010, p000, {-1, 0, 0}, color, uv_scale);
+  // +X
+  add_quad(out, p100, p110, p111, p101, { 1, 0, 0}, color, uv_scale);
+  // -Y
+  add_quad(out, p000, p100, p101, p001, { 0,-1, 0}, color, uv_scale);
+  // +Y
+  add_quad(out, p010, p011, p111, p110, { 0, 1, 0}, color, uv_scale);
+  // -Z
+  add_quad(out, p000, p010, p110, p100, { 0, 0,-1}, color, uv_scale);
+  // +Z
+  add_quad(out, p001, p101, p111, p011, { 0, 0, 1}, color, uv_scale);
 }
 
 Scene::Scene() {
@@ -86,11 +66,7 @@ void Scene::build_geometry() {
   {
     float s = 20.f;
     Vec3 green{0.35f, 0.55f, 0.30f};
-    // CCW from +Y: (-s,-s) → (-s,+s) → (+s,+s) → (+s,-s) in XZ
-    // e1=(0,0,2s), e2=(2s,0,2s) → cross = (0*2s - 2s*2s, 2s*2s - 0*0, 0-0) = (-4s², 4s², 0)
-    // Wait that's wrong. a=(-s,0,-s), b=(-s,0,s), c=(s,0,s)
-    // e1 = (0,0,2s), e2 = (2s,0,2s)
-    // cross = (0*2s - 2s*0, 2s*2s - 0*0, 0*0 - 0*2s) = (0, 4s², 0) → +Y. Good.
+    // CCW from +Y (outside / above)
     add_quad(floor_,
              {-s, 0.f, -s}, {-s, 0.f,  s}, { s, 0.f,  s}, { s, 0.f, -s},
              {0.f, 1.f, 0.f}, green, 8.f);

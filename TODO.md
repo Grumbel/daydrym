@@ -38,6 +38,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: fix inverted normals (derive from winding)
-- Bundle: daydrym-007.1-fix-normals-96e286e.bundle
-  (supersedes 006.1; full history from base)
+- Current tip: fix cube face winding vs outward normals (all 6 faces)
+- Bundle: daydrym-008.1-fix-cube-faces-96e286e.bundle
+  (supersedes 007.1; full history from base)
