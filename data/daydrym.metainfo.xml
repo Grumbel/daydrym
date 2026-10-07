@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
+-->
+<component type="desktop-application">
+  <id>daydrym</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>daydrym</name>
+  <summary>First-person VR-style hello world</summary>
+  <description>
+    <p>
+      A tiny OpenGL / OpenGL ES 3 demo: walk around a house built from cubes, a
+      table piled with random cubes and a few spinning cubes, with Blinn-Phong
+      lighting, shadow maps and a procedural texture.
+    </p>
+    <p>
+      Also builds for Android, where it renders through the Google VR NDK for
+      Daydream headsets such as the Lenovo Mirage Solo.
+    </p>
+  </description>
+  <launchable type="desktop-id">daydrym.desktop</launchable>
+  <categories>
+    <category>Graphics</category>
+  </categories>
+  <provides>
+    <binary>daydrym</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-07"/>
+  </releases>
+</component>

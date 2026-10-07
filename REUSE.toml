@@ -8,7 +8,7 @@ path = [
   "mk/android/README.md",
   "flake.lock",
   "docs/screenshot.png",
-  "mk/android/app/src/main/res/mipmap-hdpi/ic_launcher.png",
+  "mk/android/app/src/main/res/mipmap-*/ic_launcher.png",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Ingo Ruhnke <grumbel@gmail.com>"

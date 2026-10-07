@@ -186,6 +186,11 @@ int main(int argc, char** argv) {
   (void)argc; (void)argv;
 
   SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
+  // Window class / app id: lets the desktop match the window to daydrym.desktop
+  // (icon, grouping in the task bar).
+  SDL_SetHint("SDL_VIDEO_X11_WMCLASS", "daydrym");
+  SDL_SetHint("SDL_VIDEO_WAYLAND_WMCLASS", "daydrym");
+  SDL_SetHint(SDL_HINT_APP_NAME, "daydrym");
 
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_SENSOR) != 0) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {

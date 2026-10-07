@@ -41,5 +41,12 @@ else()
     target_compile_definitions(daydrym PRIVATE USE_GLES=1)
   endif()
   target_link_libraries(daydrym PRIVATE ${SDL2_LIBRARIES} OpenGL::GL)
-  install(TARGETS daydrym RUNTIME DESTINATION bin)
+  include(GNUInstallDirs)
+  install(TARGETS daydrym RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(FILES data/daydrym.desktop
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+  install(FILES data/daydrym.metainfo.xml
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+  install(FILES data/daydrym.svg
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 endif()

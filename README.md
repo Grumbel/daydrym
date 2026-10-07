@@ -21,6 +21,11 @@ nix build
 ./result/bin/daydrym
 ```
 
+`nix build` (or `cmake --install`) also installs the desktop integration:
+`share/applications/daydrym.desktop`, `share/metainfo/daydrym.metainfo.xml`
+and the scalable icon `share/icons/hicolor/scalable/apps/daydrym.svg`
+(sources in `data/`). The same icon is rendered into the Android launcher icons.
+
 Controls:
 
 - **WASD** — move

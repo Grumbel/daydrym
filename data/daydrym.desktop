@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
+[Desktop Entry]
+Type=Application
+Name=daydrym
+GenericName=VR hello world
+Comment=First-person GLES3 demo: a house made of cubes with lighting and shadows
+Exec=daydrym
+Icon=daydrym
+Terminal=false
+Categories=Graphics;3DGraphics;
+Keywords=VR;3D;OpenGL;Cardboard;Daydream;demo;
+StartupWMClass=daydrym

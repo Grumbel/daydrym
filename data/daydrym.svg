@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f7fe0"/>
+      <stop offset="1" stop-color="#a9d0ff"/>
+    </linearGradient>
+    <clipPath id="clip"><rect width="128" height="128" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="128" height="128" fill="url(#sky)"/>
+    <!-- floor -->
+    <rect y="84" width="128" height="44" fill="#5a9a48"/>
+    <path d="M0 84h128v4H0z" fill="#4a8438"/>
+    <!-- house: front, side, roof -->
+    <rect x="30" y="50" width="52" height="42" fill="#d9996f"/>
+    <path d="M82 50l16-8v42l-16 8z" fill="#b87a55"/>
+    <path d="M24 50l10-18h52l12 10-16 8z" fill="#8c3b26"/>
+    <path d="M24 50h58l16-8" fill="none" stroke="#6e2c1c" stroke-width="2"/>
+    <rect x="49" y="64" width="14" height="28" fill="#4d3322"/>
+    <!-- cubes -->
+    <path d="M92 92l14-5 14 5-14 5z" fill="#4a8cf0"/>
+    <path d="M92 92l14 5v14l-14-5z" fill="#2f63b8"/>
+    <path d="M106 97l14-5v14l-14 5z" fill="#3b78d6"/>
+    <path d="M10 98l9-3 9 3-9 3z" fill="#f4d34a"/>
+    <path d="M10 98l9 3v9l-9-3z" fill="#c9a52a"/>
+    <path d="M19 101l9-3v9l-9 3z" fill="#e0bb36"/>
+  </g>
+</svg>
