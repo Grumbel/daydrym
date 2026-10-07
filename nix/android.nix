@@ -96,8 +96,8 @@ pkgs.stdenv.mkDerivation {
       esac
 
       SYSROOT="$TOOLCHAIN/sysroot"
-      CC="$TOOLCHAIN/bin/${TARGET_TRIPLE}''${API}-clang"
-      CXX="$TOOLCHAIN/bin/${TARGET_TRIPLE}''${API}-clang++"
+      CC="$TOOLCHAIN/bin/''${TARGET_TRIPLE}''${API}-clang"
+      CXX="$TOOLCHAIN/bin/''${TARGET_TRIPLE}''${API}-clang++"
       AR="$TOOLCHAIN/bin/llvm-ar"
       RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
       STRIP="$TOOLCHAIN/bin/llvm-strip"

@@ -36,6 +36,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc quit.
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: Android APK (Daydream/Cardboard-style SBS)
-- Bundle: daydrym-009.1-android-apk-96e286e.bundle
-  (supersedes 008.1; full history from base)
+- Current tip: fix Nix interpolation in android.nix (${TARGET_TRIPLE})
+- Bundle: daydrym-010.1-fix-android-nix-escape-96e286e.bundle
+  (supersedes 009.1; full history from base)
