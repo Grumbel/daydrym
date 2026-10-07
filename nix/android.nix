@@ -11,29 +11,20 @@ let
   jdk = pkgs.jdk17;
 
   androidComposition = pkgs.androidenv.composeAndroidPackages {
-    cmdLineToolsVersion = "11.0";
-    toolsVersion = "26.1.1";
-    platformToolsVersion = "34.0.5";
-    buildToolsVersions = [ "34.0.0" ];
+    platformToolsVersion = "37.0.1";
+    buildToolsVersions = [ "35.0.0" "34.0.0" ];
     includeEmulator = false;
-    platformVersions = [ "34" ];
+    platformVersions = [ "35" "34" ];
     includeSources = false;
     includeSystemImages = false;
     systemImageTypes = [ ];
     abiVersions = [ "arm64-v8a" ];
     includeNDK = true;
-    ndkVersions = [ "26.1.10909125" ];
     useGoogleAPIs = false;
     useGoogleTVAddOns = false;
   };
 
   sdk = androidComposition.androidsdk;
-  ndk = "${sdk}/libexec/android-sdk/ndk-bundle";
-  # Some nixpkgs layouts use ndk/<version>
-  ndkAlt = "${sdk}/libexec/android-sdk/ndk/26.1.10909125";
-
-  buildTools = "${sdk}/libexec/android-sdk/build-tools/34.0.0";
-  androidJar = "${sdk}/libexec/android-sdk/platforms/android-34/android.jar";
 
   abis = [ "arm64-v8a" ];
 in
@@ -58,15 +49,26 @@ pkgs.stdenv.mkDerivation {
 
   buildPhase = ''
     set -euo pipefail
-    export PATH="${buildTools}:${jdk}/bin:$PATH"
+    export PATH="${jdk}/bin:$PATH"
 
-    NDK="${ndk}"
-    if [ ! -d "$NDK" ]; then
-      NDK="${ndkAlt}"
+    # Resolve build-tools (prefer highest version directory)
+    BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools"/* 2>/dev/null | sort -V | tail -1)
+    echo "Using build-tools at $BUILD_TOOLS"
+    test -d "$BUILD_TOOLS"
+    export PATH="$BUILD_TOOLS:$PATH"
+
+    # Resolve android.jar platform
+    ANDROID_JAR=$(ls -d "$ANDROID_HOME/platforms"/android-* 2>/dev/null | sort -V | tail -1)/android.jar
+    echo "Using platform jar $ANDROID_JAR"
+    test -f "$ANDROID_JAR"
+
+    # Resolve NDK
+    NDK=""
+    if [ -d "$ANDROID_HOME/ndk-bundle" ]; then
+      NDK="$ANDROID_HOME/ndk-bundle"
     fi
-    if [ ! -d "$NDK" ]; then
-      # Find any NDK under the SDK
-      NDK=$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1 || true)
+    if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
+      NDK=$(ls -d "$ANDROID_HOME/ndk"/* 2>/dev/null | sort -V | tail -1 || true)
     fi
     echo "Using NDK at $NDK"
     test -d "$NDK"
@@ -157,7 +159,7 @@ pkgs.stdenv.mkDerivation {
     cp -a "$src/mk/android/app/src/main/java/com" "$JAVA_OUT/"
 
     find "$JAVA_OUT" -name '*.java' > "$WORK/sources.list"
-    javac --release 11 -cp "${androidJar}" -d "$CLASSES" @"$WORK/sources.list"
+    javac --release 11 -cp "$ANDROID_JAR" -d "$CLASSES" @"$WORK/sources.list"
 
     # jar → dex
     JAR="$WORK/classes.jar"
@@ -173,11 +175,11 @@ pkgs.stdenv.mkDerivation {
     cp "$src/mk/android/app/src/main/AndroidManifest.xml" "$WORK/apk/AndroidManifest.xml"
 
     # Package APK with aapt
-    AAPT="${buildTools}/aapt"
+    AAPT="$BUILD_TOOLS/aapt"
     UNSIGNED="$WORK/daydrym-unsigned.apk"
     "$AAPT" package -f -M "$WORK/apk/AndroidManifest.xml" \
       -S "$WORK/apk/res" \
-      -I "${androidJar}" \
+      -I "$ANDROID_JAR" \
       -F "$UNSIGNED" \
       --min-sdk-version 24 \
       --target-sdk-version 34
@@ -189,7 +191,7 @@ pkgs.stdenv.mkDerivation {
 
     # Align + sign with debug key
     ALIGNED="$WORK/daydrym-aligned.apk"
-    "${buildTools}/zipalign" -f 4 "$UNSIGNED" "$ALIGNED"
+    "$BUILD_TOOLS/zipalign" -f 4 "$UNSIGNED" "$ALIGNED"
 
     KEYSTORE="$WORK/debug.keystore"
     keytool -genkeypair -v -keystore "$KEYSTORE" -storepass android \
@@ -197,7 +199,7 @@ pkgs.stdenv.mkDerivation {
       -validity 10000 -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
 
     SIGNED="$WORK/daydrym.apk"
-    "${buildTools}/apksigner" sign \
+    "$BUILD_TOOLS/apksigner" sign \
       --ks "$KEYSTORE" --ks-pass pass:android \
       --key-pass pass:android \
       --out "$SIGNED" "$ALIGNED"
