@@ -690,8 +690,10 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
     right = right.normalized();
     fwd = fwd.normalized();
     const float speed = 3.0f * dt;
-    // Negate Y: pad/stick forward (+Y in OpenXR) should move along view forward.
-    st.locomotion += fwd * (-move_y * speed) + right * (move_x * speed);
+    // OpenXR trackpad +Y is toward the ring (away from user); SteamVR/ALVE
+    // reports the opposite of what we want for head-relative walk, so use +Y
+    // on the pad as world-forward without an extra negate.
+    st.locomotion += fwd * (move_y * speed) + right * (move_x * speed);
   }
 
   (void)scene;
