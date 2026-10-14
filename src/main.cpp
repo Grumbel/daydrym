@@ -4,8 +4,13 @@
 #include "scene.hpp"
 #include "math.hpp"
 
+#if defined(DAYDRYM_OPENXR)
+#  include "openxr_app.hpp"
+#endif
+
 #include <SDL.h>
 #include <cstdio>
+#include <cstring>
 #include <cmath>
 #define DAYDRYM_LOGI(...) do { std::printf(__VA_ARGS__); std::printf("\n"); } while (0)
 #define DAYDRYM_LOGE(...) do { std::fprintf(stderr, __VA_ARGS__); std::fprintf(stderr, "\n"); } while (0)
@@ -183,7 +188,16 @@ static void render_eye(Renderer& renderer, Scene& scene,
 
 
 int main(int argc, char** argv) {
-  (void)argc; (void)argv;
+  bool want_openxr = false;
+  for (int i = 1; i < argc; ++i) {
+    if (std::strcmp(argv[i], "--openxr") == 0) {
+      want_openxr = true;
+    } else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+      std::printf("Usage: daydrym [--openxr]\n");
+      std::printf("  --openxr   Use OpenXR runtime (Linux desktop; requires a runtime e.g. Monado)\n");
+      return 0;
+    }
+  }
 
   SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
   // Window class / app id: lets the desktop match the window to daydrym.desktop
@@ -237,6 +251,25 @@ int main(int argc, char** argv) {
   SDL_GL_GetDrawableSize(window, &draw_w, &draw_h);
 
   print_startup_info(window, draw_w, draw_h);
+
+#if defined(DAYDRYM_OPENXR)
+  if (want_openxr) {
+    DAYDRYM_LOGI("Starting OpenXR path (--openxr)");
+    const int rc = run_openxr(window, ctx);
+    if (ctx) SDL_GL_DeleteContext(ctx);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return rc;
+  }
+#else
+  if (want_openxr) {
+    DAYDRYM_LOGE("This build was compiled without OpenXR support (DAYDRYM_OPENXR=OFF or loader missing)");
+    if (ctx) SDL_GL_DeleteContext(ctx);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 1;
+  }
+#endif
 
   Renderer renderer;
   if (!renderer.init(draw_w, draw_h)) {
