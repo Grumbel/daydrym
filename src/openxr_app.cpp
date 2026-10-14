@@ -1126,9 +1126,10 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
         // Controllers + laser: tracked view (physical hand position)
         scene.draw_controller(renderer, view_tracked, proj, hand.aim_model,
                               hand.ray_length, hand.buttons);
-        // Floor marker lives in scene/world space (same as teleport target)
+        // Floor hit is in tracking space (same as the laser). Draw the marker
+        // with the tracked view so it sits on the ray, not offset by loco/yaw.
         if (hand.floor_hit)
-          scene.draw_marker(renderer, view_scene, proj, hand.floor_point);
+          scene.draw_marker(renderer, view_tracked, proj, hand.floor_point);
       }
 
       glBindFramebuffer(GL_FRAMEBUFFER, 0);
