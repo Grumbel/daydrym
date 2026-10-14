@@ -1,7 +1,7 @@
 # TODO.md
 
 ## Current tip
-OpenXR: trackpad click left/right → 45° snap turn around player.
+OpenXR snap turn: shared head pivot for both eyes (fix stereo).
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
@@ -47,5 +47,5 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
 - Current tip: fix daydrym-steamvr let-binding (flake eval)
-- Bundle: daydrym-026.8-openxr-snap-turn-96e286e.bundle
-  (supersedes 026.7; full history from base)
+- Bundle: daydrym-026.9-snap-turn-stereo-96e286e.bundle
+  (supersedes 026.8; full history from base)

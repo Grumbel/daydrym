@@ -1097,10 +1097,10 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
       Mat4 view_tracked = Mat4::view_from_pose(
           pose.position.x, pose.position.y, pose.position.z,
           pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
-      // Locomotion translate then yaw around the head's floor position so snap
-      // turns pivot on the player, not the stage origin.
-      const float hx = pose.position.x;
-      const float hz = pose.position.z;
+      // Locomotion + snap yaw. Pivot must be the SAME for both eyes (use the
+      // averaged head_pos), otherwise stereo parallax is destroyed.
+      const float hx = head_pos.x;
+      const float hz = head_pos.z;
       Mat4 view_scene =
           view_tracked *
           Mat4::translate({hx, 0.f, hz}) *
