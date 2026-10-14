@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright 2026 Ingo Ruhnke <grumbel@gmail.com>
 {
-  description = "daydrym — GLES3/OpenGL VR-style hello world (house + cubes). Desktop + Android APK.";
+  description = "daydrym — GLES3/OpenGL VR-style hello world (desktop + optional OpenXR + Android/GVR)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -9,7 +9,7 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
+    flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -33,8 +33,16 @@
           version = "0.1.0";
           inherit src;
           nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config ];
-          buildInputs = [ pkgs.SDL2 pkgs.libGL ];
-          cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
+          buildInputs = [
+            pkgs.SDL2
+            pkgs.libGL
+            pkgs.libx11
+            pkgs.openxr-loader
+          ];
+          cmakeFlags = [
+            "-DCMAKE_BUILD_TYPE=Release"
+            "-DDAYDRYM_OPENXR=ON"
+          ];
         };
 
         daydrym-gles = daydrym.overrideAttrs (old: {
@@ -81,6 +89,9 @@
             pkgs.pkg-config
             pkgs.SDL2
             pkgs.libGL
+            pkgs.libx11
+            pkgs.openxr-loader
+            pkgs.monado  # optional runtime for local --openxr testing
             pkgs.gdb
             pkgs.clang-tools
             pkgs.jdk17
@@ -88,6 +99,12 @@
           shellHook = ''
             echo "daydrym dev shell"
             echo "  nix build .#daydrym"
+            echo "  ./result/bin/daydrym           # desktop window"
+            echo "  ./result/bin/daydrym --openxr  # OpenXR (needs runtime)"
+            echo "  # Monado example:"
+            echo "  #   monado-service &"
+            echo "  #   export XR_RUNTIME_JSON=\$(dirname \$(dirname \$(which monado-service)))/share/openxr/1/openxr_monado.json"
+            echo "  #   ./result/bin/daydrym --openxr"
             echo "  nix build .#daydrym-android   # APK (arm64-v8a, debug-signed)"
           '';
         };

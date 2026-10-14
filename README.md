@@ -74,3 +74,38 @@ buttons as you use them. See `mk/android/README.md` for packaging details.
 ## License
 
 GPL-3.0-or-later. See `LICENSES/` and the SPDX headers in source files.
+
+## OpenXR (Linux desktop)
+
+Optional path for a real HMD via any OpenXR runtime (Monado, SteamVR, …).
+The Android/Daydream build is unchanged (Google VR NDK).
+
+```bash
+nix build
+./result/bin/daydrym --openxr
+```
+
+Requirements at **runtime** (not linked into the binary):
+
+1. An OpenXR runtime and its JSON manifest
+2. Typically X11 or XWayland (graphics binding is `XrGraphicsBindingOpenGLXlibKHR`)
+
+**Monado on NixOS:**
+
+```nix
+services.monado = {
+  enable = true;
+  defaultRuntime = true;
+};
+```
+
+Or ad-hoc:
+
+```bash
+monado-service &
+export XR_RUNTIME_JSON=/path/to/openxr_monado.json
+./result/bin/daydrym --openxr
+```
+
+Build without OpenXR: `cmake -DDAYDRYM_OPENXR=OFF …`.
+

@@ -16,11 +16,11 @@ stays SDL2-only.
 ## Goals
 - Compile and run under NixOS / Linux with a normal desktop GL context.
 - Same codebase path ready for GLES3 (Android / pure ES).
-- Minimal dependencies: SDL2 + system OpenGL / GLES (desktop); GVR NDK (Android).
+- Minimal dependencies: SDL2 + system OpenGL / GLES (desktop); optional OpenXR loader (Linux); GVR NDK (Android).
 - GPLv3+, REUSE-friendly SPDX headers.
 
 ## Layout
-- `src/` — main (desktop/SDL), gvr_app (Android/GVR JNI), renderer, scene, math
+- `src/` — main (desktop/SDL), openxr_app (optional Linux OpenXR), gvr_app (Android/GVR JNI), renderer, scene, math
 - `include/` — headers
 - `flake.nix` — desktop package + devShell
 - Android: `nix build .#daydrym-android` → `result/daydrym.apk` (see `nix/android.nix`)

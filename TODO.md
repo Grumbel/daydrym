@@ -1,7 +1,7 @@
 # TODO.md
 
 ## Current tip
-Initial hello-world: desktop OpenGL 3.3 + optional GLES path, simple house + cubes scene, mouse-look + WASD, side-by-side stereo toggle (`V`).
+Optional OpenXR on Linux desktop (`--openxr`): OpenGL + Xlib graphics binding, stereo views into runtime swapchains. Daydream/GVR Android path unchanged.
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
