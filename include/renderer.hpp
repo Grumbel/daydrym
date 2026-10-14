@@ -33,8 +33,11 @@ public:
   void draw_shadow(const std::vector<Vertex>& vertices, const Mat4& model);
   void end_shadow_pass();
 
-  // Main lit + textured + shadowed pass
+  // Main lit + textured + shadowed pass (clears default target, sets viewport)
   void begin_frame(const Light& light, const Vec3& view_pos);
+  // Bind lit program + light/shadow uniforms without changing FBO or viewport.
+  // Used by OpenXR (and any path that already bound a custom framebuffer).
+  void setup_lit_pass(const Light& light, const Vec3& view_pos);
   void draw(const std::vector<Vertex>& vertices, const Mat4& model,
             const Mat4& view, const Mat4& proj);
   void end_frame();

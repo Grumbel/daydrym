@@ -444,10 +444,8 @@ void Renderer::end_shadow_pass() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Renderer::begin_frame(const Light& light, const Vec3& view_pos) {
+void Renderer::setup_lit_pass(const Light& light, const Vec3& view_pos) {
   view_pos_ = view_pos;
-  glViewport(0, 0, width_, height_);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glUseProgram(lit_program_);
 
   Vec3 ld = light.direction.normalized();
@@ -464,6 +462,12 @@ void Renderer::begin_frame(const Light& light, const Vec3& view_pos) {
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, shadow_tex_);
   glUniform1i(u_shadow_map_, 1);
+}
+
+void Renderer::begin_frame(const Light& light, const Vec3& view_pos) {
+  glViewport(0, 0, width_, height_);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  setup_lit_pass(light, view_pos);
 }
 
 void Renderer::draw(const std::vector<Vertex>& vertices, const Mat4& model,
