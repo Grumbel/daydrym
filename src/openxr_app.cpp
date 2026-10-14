@@ -93,11 +93,13 @@ struct OpenXRState {
   // Actions / controllers
   XrActionSet action_set = XR_NULL_HANDLE;
   XrAction aim_pose_action = XR_NULL_HANDLE;
+  XrAction grip_pose_action = XR_NULL_HANDLE;
   XrAction select_action = XR_NULL_HANDLE;
   XrAction menu_action = XR_NULL_HANDLE;
   XrAction move_action = XR_NULL_HANDLE;
   XrPath hand_path[kHandCount]{};
   XrSpace aim_space[kHandCount]{XR_NULL_HANDLE, XR_NULL_HANDLE};
+  XrSpace grip_space[kHandCount]{XR_NULL_HANDLE, XR_NULL_HANDLE};
   bool actions_attached = false;
 
   // Play-space locomotion offset (stage/local), applied to views
@@ -288,22 +290,15 @@ bool create_actions(OpenXRState& st) {
 
   if (!make_action("aim_pose", "Aim Pose", XR_ACTION_TYPE_POSE_INPUT, &st.aim_pose_action))
     return false;
+  if (!make_action("grip_pose", "Grip Pose", XR_ACTION_TYPE_POSE_INPUT, &st.grip_pose_action))
+    return false;
   if (!make_action("select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT, &st.select_action))
     return false;
   if (!make_action("menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT, &st.menu_action))
     return false;
   if (!make_action("move", "Move", XR_ACTION_TYPE_VECTOR2F_INPUT, &st.move_action))
     return false;
-
-  for (int h = 0; h < kHandCount; ++h) {
-    XrActionSpaceCreateInfo spci{XR_TYPE_ACTION_SPACE_CREATE_INFO};
-    spci.action = st.aim_pose_action;
-    spci.subactionPath = st.hand_path[h];
-    spci.poseInActionSpace = {{0, 0, 0, 1}, {0, 0, 0}};
-    if (!xr_check(st.instance, xrCreateActionSpace(st.session, &spci, &st.aim_space[h]),
-                  "xrCreateActionSpace"))
-      return false;
-  }
+  // Action spaces created in attach_actions after xrBeginSession + attach.
 
   struct Binding { XrAction action; const char* path; };
   auto suggest = [&](const char* profile, std::initializer_list<Binding> binds) {
@@ -333,6 +328,8 @@ bool create_actions(OpenXRState& st) {
   suggest("/interaction_profiles/khr/simple_controller", {
       {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
       {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.grip_pose_action, "/user/hand/left/input/grip/pose"},
+      {st.grip_pose_action, "/user/hand/right/input/grip/pose"},
       {st.select_action, "/user/hand/left/input/select/click"},
       {st.select_action, "/user/hand/right/input/select/click"},
       {st.menu_action, "/user/hand/left/input/menu/click"},
@@ -341,6 +338,8 @@ bool create_actions(OpenXRState& st) {
   suggest("/interaction_profiles/oculus/touch_controller", {
       {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
       {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.grip_pose_action, "/user/hand/left/input/grip/pose"},
+      {st.grip_pose_action, "/user/hand/right/input/grip/pose"},
       {st.select_action, "/user/hand/left/input/x/click"},
       {st.select_action, "/user/hand/right/input/a/click"},
       {st.menu_action, "/user/hand/left/input/menu/click"},
@@ -353,6 +352,8 @@ bool create_actions(OpenXRState& st) {
   suggest("/interaction_profiles/valve/index_controller", {
       {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
       {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.grip_pose_action, "/user/hand/left/input/grip/pose"},
+      {st.grip_pose_action, "/user/hand/right/input/grip/pose"},
       {st.select_action, "/user/hand/left/input/trigger/click"},
       {st.select_action, "/user/hand/right/input/trigger/click"},
       {st.menu_action, "/user/hand/left/input/b/click"},
@@ -363,6 +364,8 @@ bool create_actions(OpenXRState& st) {
   suggest("/interaction_profiles/htc/vive_controller", {
       {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
       {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.grip_pose_action, "/user/hand/left/input/grip/pose"},
+      {st.grip_pose_action, "/user/hand/right/input/grip/pose"},
       {st.select_action, "/user/hand/left/input/trigger/click"},
       {st.select_action, "/user/hand/right/input/trigger/click"},
       {st.menu_action, "/user/hand/left/input/menu/click"},
@@ -385,6 +388,25 @@ bool attach_actions(OpenXRState& st) {
     return false;
   st.actions_attached = true;
   DAYDRYM_LOGI("OpenXR action sets attached");
+
+  // Create action spaces after begin+attach so the runtime can resolve poses.
+  for (int h = 0; h < kHandCount; ++h) {
+    XrActionSpaceCreateInfo spci{XR_TYPE_ACTION_SPACE_CREATE_INFO};
+    spci.poseInActionSpace = {{0, 0, 0, 1}, {0, 0, 0}};
+    spci.subactionPath = st.hand_path[h];
+    if (st.aim_space[h] == XR_NULL_HANDLE) {
+      spci.action = st.aim_pose_action;
+      if (!xr_check(st.instance, xrCreateActionSpace(st.session, &spci, &st.aim_space[h]),
+                    "xrCreateActionSpace(aim)"))
+        return false;
+    }
+    if (st.grip_space[h] == XR_NULL_HANDLE) {
+      spci.action = st.grip_pose_action;
+      if (!xr_check(st.instance, xrCreateActionSpace(st.session, &spci, &st.grip_space[h]),
+                    "xrCreateActionSpace(grip)"))
+        return false;
+    }
+  }
   return true;
 }
 
@@ -447,6 +469,7 @@ void log_input_diagnostics(OpenXRState& st) {
   log_interaction_profiles(st, "diagnostics");
   DAYDRYM_LOGI("OpenXR action bindings currently active:");
   log_bound_sources(st, st.aim_pose_action, "aim_pose");
+  log_bound_sources(st, st.grip_pose_action, "grip_pose");
   log_bound_sources(st, st.select_action, "select");
   log_bound_sources(st, st.menu_action, "menu");
   log_bound_sources(st, st.move_action, "move");
@@ -531,22 +554,43 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
     XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
     gi.subactionPath = st.hand_path[h];
 
-    // Aim
-    gi.action = st.aim_pose_action;
-    XrActionStatePose pose_st{XR_TYPE_ACTION_STATE_POSE};
-    if (XR_SUCCEEDED(xrGetActionStatePose(st.session, &gi, &pose_st)) && pose_st.isActive) {
+    // Aim pose preferred; fall back to grip if aim has no tracked position.
+    auto try_locate = [&](XrAction action, XrSpace space, const char* label) -> bool {
+      gi.action = action;
+      XrActionStatePose pose_st{XR_TYPE_ACTION_STATE_POSE};
+      if (XR_FAILED(xrGetActionStatePose(st.session, &gi, &pose_st)) || !pose_st.isActive)
+        return false;
+      if (space == XR_NULL_HANDLE)
+        return false;
       XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
-      if (XR_SUCCEEDED(xrLocateSpace(st.aim_space[h], st.ref_space, time, &loc))) {
-        const auto f = loc.locationFlags;
-        if ((f & XR_SPACE_LOCATION_POSITION_VALID_BIT) &&
-            (f & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
-          hand.aim_active = true;
-          const auto& p = loc.pose.position;
-          const auto& o = loc.pose.orientation;
-          hand.aim_model = Mat4::model_from_pose(p.x, p.y, p.z, o.x, o.y, o.z, o.w);
-        }
+      if (XR_FAILED(xrLocateSpace(space, st.ref_space, time, &loc)))
+        return false;
+      const auto f = loc.locationFlags;
+      const bool ori = (f & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0;
+      const bool pos = (f & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0;
+      const bool pos_trk = (f & XR_SPACE_LOCATION_POSITION_TRACKED_BIT) != 0;
+      if (!ori)
+        return false;
+      const auto& p = loc.pose.position;
+      const auto& o = loc.pose.orientation;
+      // Use pose even if position is only VALID (not TRACKED); still better than origin.
+      const float px = pos ? p.x : 0.f;
+      const float py = pos ? p.y : 0.f;
+      const float pz = pos ? p.z : 0.f;
+      hand.aim_active = true;
+      hand.aim_model = Mat4::model_from_pose(px, py, pz, o.x, o.y, o.z, o.w);
+      static double pose_log_accum = 0.0;
+      pose_log_accum += dt;
+      if (pose_log_accum >= 2.0 && h == kHandRight) {
+        pose_log_accum = 0.0;
+        DAYDRYM_LOGI(
+            "  pose[%s] flags=0x%x pos_tracked=%d pos=(%.3f,%.3f,%.3f)",
+            label, static_cast<unsigned>(f), pos_trk ? 1 : 0, px, py, pz);
       }
-    }
+      return pos_trk || pos;
+    };
+    if (!try_locate(st.aim_pose_action, st.aim_space[h], "aim"))
+      try_locate(st.grip_pose_action, st.grip_space[h], "grip");
 
     // Select
     gi.action = st.select_action;
@@ -791,6 +835,10 @@ void destroy_openxr(OpenXRState& st) {
     if (st.aim_space[h] != XR_NULL_HANDLE) {
       xrDestroySpace(st.aim_space[h]);
       st.aim_space[h] = XR_NULL_HANDLE;
+    }
+    if (st.grip_space[h] != XR_NULL_HANDLE) {
+      xrDestroySpace(st.grip_space[h]);
+      st.grip_space[h] = XR_NULL_HANDLE;
     }
   }
   if (st.action_set != XR_NULL_HANDLE) {
