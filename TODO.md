@@ -45,6 +45,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: drop removed SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH
-- Bundle: daydrym-023.1-fix-sdl-hint-96e286e.bundle
-  (supersedes 022.1; full history from base)
+- Current tip: a3964f3 optional OpenXR (--openxr) on Linux desktop
+- Bundle: daydrym-024.1-openxr-linux-96e286e.bundle
+  (supersedes 023.1; full history from base)
