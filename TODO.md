@@ -48,6 +48,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: OpenXR SteamVR/Nix workaround docs + daydrym-steamvr FHS app
-- Bundle: daydrym-025.1-openxr-steamvr-nix-96e286e.bundle
-  (supersedes 024.1; full history from base)
+- Current tip: fix daydrym-steamvr let-binding (flake eval)
+- Bundle: daydrym-025.2-fix-steamvr-fhs-let-96e286e.bundle
+  (supersedes 025.1; full history from base)

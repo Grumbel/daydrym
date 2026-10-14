@@ -61,8 +61,6 @@
           inherit gvrAar;
           version = "0.1.0";
         };
-      in
-      {
 
         # FHS wrapper so SteamVR's OpenXR runtime (and its system deps like
         # libuuid) can be dlopen'd from a Nix-built binary. Prefer Monado when
@@ -92,6 +90,8 @@
           ];
           runScript = "daydrym";
         };
+      in
+      {
 
         packages = {
           default = daydrym;
