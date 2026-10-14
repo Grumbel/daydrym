@@ -61,6 +61,47 @@ struct Mat4 {
     return r;
   }
 
+  // Asymmetric projection from OpenXR-style FOV angles (radians).
+  // angleLeft/Down are typically negative; angleRight/Up positive.
+  static Mat4 perspective_fov(float angleLeft, float angleRight,
+                              float angleUp, float angleDown,
+                              float znear, float zfar) {
+    const float tanL = std::tan(angleLeft);
+    const float tanR = std::tan(angleRight);
+    const float tanU = std::tan(angleUp);
+    const float tanD = std::tan(angleDown);
+    const float l = tanL * znear;
+    const float r = tanR * znear;
+    const float t = tanU * znear;
+    const float b = tanD * znear;
+    Mat4 m{};
+    m.m[0]  =  2.f * znear / (r - l);
+    m.m[5]  =  2.f * znear / (t - b);
+    m.m[8]  =  (r + l) / (r - l);
+    m.m[9]  =  (t + b) / (t - b);
+    m.m[10] = -(zfar + znear) / (zfar - znear);
+    m.m[11] = -1.f;
+    m.m[14] = -(2.f * zfar * znear) / (zfar - znear);
+    m.m[15] = 0.f;
+    return m;
+  }
+
+  // View matrix from world-space pose (position + unit quaternion x,y,z,w).
+  // OpenXR XrPosef: transforms world coordinates into the posed view space.
+  static Mat4 view_from_pose(float px, float py, float pz,
+                             float qx, float qy, float qz, float qw) {
+    Mat4 R = from_quat(qx, qy, qz, qw);
+    // R maps view-local -> world; view matrix needs world -> view = R^T, -R^T * t
+    Mat4 v{};
+    v.m[0] = R.m[0]; v.m[4] = R.m[1]; v.m[8]  = R.m[2];
+    v.m[1] = R.m[4]; v.m[5] = R.m[5]; v.m[9]  = R.m[6];
+    v.m[2] = R.m[8]; v.m[6] = R.m[9]; v.m[10] = R.m[10];
+    v.m[12] = -(v.m[0] * px + v.m[4] * py + v.m[8]  * pz);
+    v.m[13] = -(v.m[1] * px + v.m[5] * py + v.m[9]  * pz);
+    v.m[14] = -(v.m[2] * px + v.m[6] * py + v.m[10] * pz);
+    return v;
+  }
+
   static Mat4 ortho(float left, float right, float bottom, float top,
                     float znear, float zfar) {
     Mat4 r{};
