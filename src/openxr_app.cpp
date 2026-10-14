@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -155,6 +156,11 @@ void print_runtime_load_help() {
 }
 
 bool create_instance(OpenXRState& st) {
+  if (const char* j = std::getenv("XR_RUNTIME_JSON"))
+    DAYDRYM_LOGI("XR_RUNTIME_JSON=%s", j);
+  else
+    DAYDRYM_LOGI("XR_RUNTIME_JSON unset (loader uses active_runtime.json)");
+
   // Enumerate extensions; require XR_KHR_opengl_enable
   uint32_t ext_count = 0;
   XrResult r = xrEnumerateInstanceExtensionProperties(nullptr, 0, &ext_count, nullptr);

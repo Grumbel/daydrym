@@ -124,6 +124,8 @@ runtime (`vrclient.so`) is a non-Nix library and often fails with errors like
 steam-run $(nix build -o result .#daydrym && echo result/bin/daydrym) --openxr
 # or
 nix run .#daydrym-steamvr -- --openxr
+# equivalent:
+#   nix build .#daydrym && steam-run ./result/bin/daydrym --openxr
 ```
 
 `XR_RUNTIME_JSON` always overrides the active_runtime.json selection if you want
@@ -138,9 +140,21 @@ ln -sf ~/.steam/steam/steamapps/common/SteamVR/steamxr_linux64.json \
   ~/.config/openxr/1/active_runtime.json
 
 nix run .#daydrym-steamvr -- --openxr
+# equivalent:
+#   nix build .#daydrym && steam-run ./result/bin/daydrym --openxr
 ```
 
 If `xrCreateInstance` still returns `XR_ERROR_RUNTIME_FAILURE` (-2), check
-`~/.steam/steam/logs/` and that `steamxr_linux64.json` exists next to your
-SteamVR install.
+`~/.steam/steam/logs/vrserver.txt`. A line like
+`sRuntimePathFromServer … mismatches sRuntimePathFromClient …/bin/` means the
+active runtime JSON is wrong — use `steamxr_linux64.json` as above.
+
+Also try the full Steam FHS explicitly:
+
+```bash
+nix build .#daydrym
+XR_RUNTIME_JSON=…/SteamVR/steamxr_linux64.json steam-run ./result/bin/daydrym --openxr
+```
+
+`daydrym-steamvr` is a thin wrapper around `steam-run` for the same effect.
 

@@ -62,33 +62,16 @@
           version = "0.1.0";
         };
 
-        # FHS wrapper so SteamVR's OpenXR runtime (and its system deps like
-        # libuuid) can be dlopen'd from a Nix-built binary. Prefer Monado when
-        # possible; use this when active_runtime.json points at SteamVR.
-        daydrym-steamvr = pkgs.buildFHSEnv {
+        # SteamVR's OpenXR runtime needs a full Steam-like FHS (libuuid and
+        # many other host libs). Reuse nixpkgs steam-run instead of a partial
+        # buildFHSEnv — a minimal FHS still yields XR_ERROR_RUNTIME_FAILURE.
+        daydrym-steamvr = pkgs.writeShellApplication {
           name = "daydrym-steamvr";
-          targetPkgs = p: [
-            daydrym
-            p.libuuid
-            p.util-linux
-            p.zlib
-            p.libGL
-            p.libglvnd
-            p.xorg.libX11
-            p.xorg.libXext
-            p.xorg.libXrender
-            p.xorg.libXi
-            p.xorg.libXrandr
-            p.xorg.libXcursor
-            p.xorg.libXfixes
-            p.xorg.libXxf86vm
-            p.libxkbcommon
-            p.alsa-lib
-            p.dbus
-            p.openssl
-            p.stdenv.cc.cc.lib
-          ];
-          runScript = "daydrym";
+          runtimeInputs = [ pkgs.steam-run daydrym ];
+          text = ''
+            # Pass through XR_* so the user can point at steamxr_linux64.json
+            exec steam-run ${daydrym}/bin/daydrym "$@"
+          '';
         };
       in
       {
