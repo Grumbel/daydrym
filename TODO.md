@@ -1,7 +1,7 @@
 # TODO.md
 
 ## Current tip
-OpenXR: teleport marker matches laser (tracked view); stand under head on teleport.
+OpenXR teleport: loco += R(yaw)*(floor - head) so destination matches marker.
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
@@ -47,5 +47,5 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
 - Current tip: fix daydrym-steamvr let-binding (flake eval)
-- Bundle: daydrym-027.2-teleport-under-head-96e286e.bundle
-  (supersedes 027.1; full history from base)
+- Bundle: daydrym-027.3-teleport-dest-96e286e.bundle
+  (supersedes 027.2; full history from base)

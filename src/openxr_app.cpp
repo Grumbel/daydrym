@@ -701,11 +701,17 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
 
     // Teleport on select click when aiming at the floor
     if (hand.select_clicked && hand.floor_hit) {
-      // T(-loco) * floor_point ≈ head on XZ so we stand on the target.
-      st.locomotion.x = hand.floor_point.x - head_pos.x;
-      st.locomotion.z = hand.floor_point.z - head_pos.z;
+      // floor_point is in tracking space; scene under the player is at
+      // loco + head. Offset by R(yaw)*(floor_point - head) so the aimed
+      // point becomes the new stand location (works with prior loco + snap).
+      const float dx = hand.floor_point.x - head_pos.x;
+      const float dz = hand.floor_point.z - head_pos.z;
+      const float c = std::cos(st.player_yaw);
+      const float s = std::sin(st.player_yaw);
+      st.locomotion.x += dx * c + dz * s;
+      st.locomotion.z += -dx * s + dz * c;
       st.locomotion.y = 0.f;
-      DAYDRYM_LOGI("Teleport to (%.2f, %.2f)", hand.floor_point.x, hand.floor_point.z);
+      DAYDRYM_LOGI("Teleport (loco now %.2f, %.2f)", st.locomotion.x, st.locomotion.z);
     }
   }
 
