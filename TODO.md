@@ -1,7 +1,7 @@
 # TODO.md
 
 ## Current tip
-OpenXR trackpad Y: flip walk mapping again (use +move_y * fwd).
+OpenXR: invert touchpad Y only for controller mesh indicator (walk already OK).
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
@@ -47,5 +47,5 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
 - Current tip: fix daydrym-steamvr let-binding (flake eval)
-- Bundle: daydrym-026.6-openxr-trackpad-y-96e286e.bundle
-  (supersedes 026.5; full history from base)
+- Bundle: daydrym-026.7-controller-touch-y-96e286e.bundle
+  (supersedes 026.6; full history from base)

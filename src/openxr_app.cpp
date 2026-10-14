@@ -644,7 +644,12 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
         move_y = hand.move_y;
       }
       hand.buttons.touching = true;
-      hand.buttons.touch = {hand.move_x * 0.5f + 0.5f, hand.move_y * 0.5f + 0.5f};
+      // Controller mesh: touch.y increases toward +Z (handle). OpenXR pad +Y is
+      // toward the tip (-Z), so invert Y for the touch indicator only.
+      hand.buttons.touch = {
+          hand.move_x * 0.5f + 0.5f,
+          -hand.move_y * 0.5f + 0.5f,
+      };
     } else {
       hand.move_x = 0.f;
       hand.move_y = 0.f;
