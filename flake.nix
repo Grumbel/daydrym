@@ -63,11 +63,42 @@
         };
       in
       {
+
+        # FHS wrapper so SteamVR's OpenXR runtime (and its system deps like
+        # libuuid) can be dlopen'd from a Nix-built binary. Prefer Monado when
+        # possible; use this when active_runtime.json points at SteamVR.
+        daydrym-steamvr = pkgs.buildFHSEnv {
+          name = "daydrym-steamvr";
+          targetPkgs = p: [
+            daydrym
+            p.libuuid
+            p.util-linux
+            p.zlib
+            p.libGL
+            p.libglvnd
+            p.xorg.libX11
+            p.xorg.libXext
+            p.xorg.libXrender
+            p.xorg.libXi
+            p.xorg.libXrandr
+            p.xorg.libXcursor
+            p.xorg.libXfixes
+            p.xorg.libXxf86vm
+            p.libxkbcommon
+            p.alsa-lib
+            p.dbus
+            p.openssl
+            p.stdenv.cc.cc.lib
+          ];
+          runScript = "daydrym";
+        };
+
         packages = {
           default = daydrym;
           daydrym = daydrym;
           daydrym-gles = daydrym-gles;
           daydrym-android = daydrym-android;
+          daydrym-steamvr = daydrym-steamvr;
         };
 
         apps = rec {
@@ -80,6 +111,10 @@
           daydrym-gles = {
             type = "app";
             program = "${self.packages.${system}.daydrym-gles}/bin/daydrym";
+          };
+          daydrym-steamvr = {
+            type = "app";
+            program = "${self.packages.${system}.daydrym-steamvr}/bin/daydrym-steamvr";
           };
         };
 
@@ -101,6 +136,7 @@
             echo "  nix build .#daydrym"
             echo "  ./result/bin/daydrym           # desktop window"
             echo "  ./result/bin/daydrym --openxr  # OpenXR (needs runtime)"
+            echo "  nix run .#daydrym-steamvr -- --openxr  # SteamVR-friendly FHS"
             echo "  # Monado example:"
             echo "  #   monado-service &"
             echo "  #   export XR_RUNTIME_JSON=\$(dirname \$(dirname \$(which monado-service)))/share/openxr/1/openxr_monado.json"

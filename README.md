@@ -109,3 +109,23 @@ export XR_RUNTIME_JSON=/path/to/openxr_monado.json
 
 Build without OpenXR: `cmake -DDAYDRYM_OPENXR=OFF …`.
 
+### SteamVR + Nix (`libuuid` / runtime load failures)
+
+`nix run` / Nix-built binaries use the Nix dynamic linker. SteamVR’s OpenXR
+runtime (`vrclient.so`) is a non-Nix library and often fails with errors like
+`libuuid.so.1: cannot open shared object file` when the loader tries to activate
+`~/.config/openxr/1/active_runtime.json`.
+
+**Preferred on NixOS:** use Monado as the active runtime (see above).
+
+**Keep SteamVR:** run inside an FHS environment so Steam’s dependencies resolve:
+
+```bash
+steam-run $(nix build -o result .#daydrym && echo result/bin/daydrym) --openxr
+# or
+nix run .#daydrym-steamvr -- --openxr
+```
+
+`XR_RUNTIME_JSON` always overrides the active_runtime.json selection if you want
+Monado without changing the SteamVR default for other apps.
+

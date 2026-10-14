@@ -136,12 +136,33 @@ bool fill_glx_binding(SDL_Window* window, XrGraphicsBindingOpenGLXlibKHR* out) {
   return true;
 }
 
+void print_runtime_load_help() {
+  DAYDRYM_LOGE(
+      "OpenXR loader could not load an active runtime.\n"
+      "  Common causes on Nix / nix run:\n"
+      "  - SteamVR is selected in ~/.config/openxr/1/active_runtime.json but its\n"
+      "    libraries (e.g. libuuid) are not visible to the Nix dynamic linker.\n"
+      "  Workarounds:\n"
+      "  1) Prefer Monado (fully Nix-friendly):\n"
+      "       export XR_RUNTIME_JSON=$MONADO_RUNTIME   # or path to openxr_monado.json\n"
+      "       daydrym --openxr\n"
+      "     On NixOS: services.monado.enable = true; defaultRuntime = true;\n"
+      "  2) Keep SteamVR but run under an FHS env so system/Steam libs resolve:\n"
+      "       steam-run daydrym --openxr\n"
+      "     or:  nix run .#daydrym-steamvr -- --openxr\n"
+      "  3) Point XR_RUNTIME_JSON at any other OpenXR runtime manifest.\n"
+      "  Active config is usually ~/.config/openxr/1/active_runtime.json");
+}
+
 bool create_instance(OpenXRState& st) {
   // Enumerate extensions; require XR_KHR_opengl_enable
   uint32_t ext_count = 0;
   XrResult r = xrEnumerateInstanceExtensionProperties(nullptr, 0, &ext_count, nullptr);
-  if (!xr_check(XR_NULL_HANDLE, r, "xrEnumerateInstanceExtensionProperties(count)"))
+  if (!xr_check(XR_NULL_HANDLE, r, "xrEnumerateInstanceExtensionProperties(count)")) {
+    if (r == XR_ERROR_RUNTIME_UNAVAILABLE)
+      print_runtime_load_help();
     return false;
+  }
   std::vector<XrExtensionProperties> exts(ext_count, {XR_TYPE_EXTENSION_PROPERTIES});
   r = xrEnumerateInstanceExtensionProperties(nullptr, ext_count, &ext_count, exts.data());
   if (!xr_check(XR_NULL_HANDLE, r, "xrEnumerateInstanceExtensionProperties"))

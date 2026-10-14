@@ -1,7 +1,9 @@
 # TODO.md
 
 ## Current tip
-Optional OpenXR on Linux desktop (`--openxr`): OpenGL + Xlib graphics binding, stereo views into runtime swapchains. Daydream/GVR Android path unchanged.
+OpenXR on Linux: SteamVR via active_runtime.json fails under pure Nix (missing
+libuuid etc.). Workarounds: Monado (`XR_RUNTIME_JSON`) or FHS/`steam-run` /
+`nix run .#daydrym-steamvr -- --openxr`. Clearer loader error text in app.
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
@@ -19,6 +21,7 @@ Optional OpenXR on Linux desktop (`--openxr`): OpenGL + Xlib graphics binding, s
 - [x] Directional shadow map (2048, 3x3 PCF)
 - [ ] Simple textured floor or skybox (still keep deps low)
 - [x] Daydream path via GVR NDK (Mirage Solo)
+- [x] Optional OpenXR on Linux (`--openxr`); SteamVR under Nix via FHS/`steam-run`/`daydrym-steamvr`
 
 ## Build / run (desktop)
 ```bash
@@ -45,6 +48,6 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
-- Current tip: a3964f3 optional OpenXR (--openxr) on Linux desktop
-- Bundle: daydrym-024.1-openxr-linux-96e286e.bundle
-  (supersedes 023.1; full history from base)
+- Current tip: OpenXR SteamVR/Nix workaround docs + daydrym-steamvr FHS app
+- Bundle: daydrym-025.1-openxr-steamvr-nix-96e286e.bundle
+  (supersedes 024.1; full history from base)
