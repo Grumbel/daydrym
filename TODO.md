@@ -1,8 +1,7 @@
 # TODO.md
 
 ## Current tip
-OpenXR: locomotion only on scene view; controllers use tracked view so
-hands stay with the player, not a fixed world point.
+OpenXR trackpad: require touch for move (no stuck stick on release), invert Y.
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
@@ -48,5 +47,5 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
 - Current tip: fix daydrym-steamvr let-binding (flake eval)
-- Bundle: daydrym-026.4-openxr-controller-view-96e286e.bundle
-  (supersedes 026.3; full history from base)
+- Bundle: daydrym-026.5-openxr-trackpad-fix-96e286e.bundle
+  (supersedes 026.4; full history from base)

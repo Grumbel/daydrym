@@ -97,6 +97,7 @@ struct OpenXRState {
   XrAction select_action = XR_NULL_HANDLE;
   XrAction menu_action = XR_NULL_HANDLE;
   XrAction move_action = XR_NULL_HANDLE;
+  XrAction touch_action = XR_NULL_HANDLE;  // trackpad/thumbstick touch
   XrPath hand_path[kHandCount]{};
   XrSpace aim_space[kHandCount]{XR_NULL_HANDLE, XR_NULL_HANDLE};
   XrSpace grip_space[kHandCount]{XR_NULL_HANDLE, XR_NULL_HANDLE};
@@ -298,6 +299,8 @@ bool create_actions(OpenXRState& st) {
     return false;
   if (!make_action("move", "Move", XR_ACTION_TYPE_VECTOR2F_INPUT, &st.move_action))
     return false;
+  if (!make_action("touch", "Touch", XR_ACTION_TYPE_BOOLEAN_INPUT, &st.touch_action))
+    return false;
   // Action spaces created in attach_actions after xrBeginSession + attach.
 
   struct Binding { XrAction action; const char* path; };
@@ -346,6 +349,8 @@ bool create_actions(OpenXRState& st) {
       {st.menu_action, "/user/hand/right/input/b/click"},
       {st.move_action, "/user/hand/left/input/thumbstick"},
       {st.move_action, "/user/hand/right/input/thumbstick"},
+      {st.touch_action, "/user/hand/left/input/thumbstick/touch"},
+      {st.touch_action, "/user/hand/right/input/thumbstick/touch"},
   });
   // Also map trigger as select via a second suggestion is not allowed per profile;
   // use a/x for teleport (clear digital click). Thumbstick for locomotion.
@@ -360,6 +365,8 @@ bool create_actions(OpenXRState& st) {
       {st.menu_action, "/user/hand/right/input/b/click"},
       {st.move_action, "/user/hand/left/input/thumbstick"},
       {st.move_action, "/user/hand/right/input/thumbstick"},
+      {st.touch_action, "/user/hand/left/input/thumbstick/touch"},
+      {st.touch_action, "/user/hand/right/input/thumbstick/touch"},
   });
   suggest("/interaction_profiles/htc/vive_controller", {
       {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
@@ -372,6 +379,8 @@ bool create_actions(OpenXRState& st) {
       {st.menu_action, "/user/hand/right/input/menu/click"},
       {st.move_action, "/user/hand/left/input/trackpad"},
       {st.move_action, "/user/hand/right/input/trackpad"},
+      {st.touch_action, "/user/hand/left/input/trackpad/touch"},
+      {st.touch_action, "/user/hand/right/input/trackpad/touch"},
   });
 
   return true;
@@ -473,6 +482,7 @@ void log_input_diagnostics(OpenXRState& st) {
   log_bound_sources(st, st.select_action, "select");
   log_bound_sources(st, st.menu_action, "menu");
   log_bound_sources(st, st.move_action, "move");
+  log_bound_sources(st, st.touch_action, "touch");
 }
 
 void update_hand_ray(HandInput& hand) {
@@ -611,20 +621,35 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
       hand.buttons.app = menu.currentState;
     }
 
+    // Trackpad/thumbstick touch — required on Vive so release zeros movement
+    // (the VECTOR2F path often keeps the last position after lift).
+    bool touching = true;
+    gi.action = st.touch_action;
+    XrActionStateBoolean touch_st{XR_TYPE_ACTION_STATE_BOOLEAN};
+    if (XR_SUCCEEDED(xrGetActionStateBoolean(st.session, &gi, &touch_st)) &&
+        touch_st.isActive) {
+      touching = touch_st.currentState;
+    }
+
     // Move (thumbstick / trackpad)
     gi.action = st.move_action;
     XrActionStateVector2f mv{XR_TYPE_ACTION_STATE_VECTOR2F};
-    if (XR_SUCCEEDED(xrGetActionStateVector2f(st.session, &gi, &mv)) && mv.isActive) {
+    if (XR_SUCCEEDED(xrGetActionStateVector2f(st.session, &gi, &mv)) && mv.isActive &&
+        touching) {
       hand.move_x = mv.currentState.x;
       hand.move_y = mv.currentState.y;
-      // Prefer the stick with larger magnitude
       if (std::fabs(hand.move_x) + std::fabs(hand.move_y) >
           std::fabs(move_x) + std::fabs(move_y)) {
         move_x = hand.move_x;
         move_y = hand.move_y;
       }
-      hand.buttons.touching = (std::fabs(move_x) > 0.05f || std::fabs(move_y) > 0.05f);
-      hand.buttons.touch = {move_x * 0.5f + 0.5f, move_y * 0.5f + 0.5f};
+      hand.buttons.touching = true;
+      hand.buttons.touch = {hand.move_x * 0.5f + 0.5f, hand.move_y * 0.5f + 0.5f};
+    } else {
+      hand.move_x = 0.f;
+      hand.move_y = 0.f;
+      hand.buttons.touching = false;
+      hand.buttons.touch = {0.5f, 0.5f};
     }
 
     update_hand_ray(hand);
@@ -665,7 +690,8 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
     right = right.normalized();
     fwd = fwd.normalized();
     const float speed = 3.0f * dt;
-    st.locomotion += fwd * (move_y * speed) + right * (move_x * speed);
+    // Negate Y: pad/stick forward (+Y in OpenXR) should move along view forward.
+    st.locomotion += fwd * (-move_y * speed) + right * (move_x * speed);
   }
 
   (void)scene;
