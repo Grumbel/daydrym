@@ -129,3 +129,18 @@ nix run .#daydrym-steamvr -- --openxr
 `XR_RUNTIME_JSON` always overrides the active_runtime.json selection if you want
 Monado without changing the SteamVR default for other apps.
 
+**SteamVR must be running** before `xrCreateInstance` succeeds. Start SteamVR
+(and wake the headset / streaming client), then:
+
+```bash
+# Official runtime manifest (recommended over a hand-written JSON):
+ln -sf ~/.steam/steam/steamapps/common/SteamVR/steamxr_linux64.json \
+  ~/.config/openxr/1/active_runtime.json
+
+nix run .#daydrym-steamvr -- --openxr
+```
+
+If `xrCreateInstance` still returns `XR_ERROR_RUNTIME_FAILURE` (-2), check
+`~/.steam/steam/logs/` and that `steamxr_linux64.json` exists next to your
+SteamVR install.
+

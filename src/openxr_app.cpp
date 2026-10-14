@@ -185,13 +185,32 @@ bool create_instance(OpenXRState& st) {
   ci.applicationInfo.applicationVersion = 1;
   std::strncpy(ci.applicationInfo.engineName, "daydrym", XR_MAX_ENGINE_NAME_SIZE - 1);
   ci.applicationInfo.engineVersion = 1;
-  ci.applicationInfo.apiVersion = XR_API_VERSION_1_0;
   ci.enabledExtensionCount = 1;
   ci.enabledExtensionNames = enabled;
 
+  // Prefer current API version; fall back to 1.0 if the runtime rejects it.
+  ci.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
   r = xrCreateInstance(&ci, &st.instance);
-  if (!xr_check(XR_NULL_HANDLE, r, "xrCreateInstance"))
+  if (XR_FAILED(r)) {
+    ci.applicationInfo.apiVersion = XR_API_VERSION_1_0;
+    r = xrCreateInstance(&ci, &st.instance);
+  }
+  if (!xr_check(XR_NULL_HANDLE, r, "xrCreateInstance")) {
+    DAYDRYM_LOGE(
+        "xrCreateInstance failed (%s).\n"
+        "  If the active runtime is SteamVR:\n"
+        "  - Start SteamVR first (headset on / streaming client connected), then retry.\n"
+        "  - Prefer the official manifest (not a hand-edited path):\n"
+        "      ln -sf ~/.steam/steam/steamapps/common/SteamVR/steamxr_linux64.json \\\n"
+        "         ~/.config/openxr/1/active_runtime.json\n"
+        "    (adjust path if Steam lives under ~/.local/share/Steam or debian-installation)\n"
+        "  - Or point at that file for this process only:\n"
+        "      XR_RUNTIME_JSON=.../SteamVR/steamxr_linux64.json daydrym --openxr\n"
+        "  - Check SteamVR logs under ~/.steam/steam/logs/ (vrclient / openxr).\n"
+        "  For a Nix-native path without SteamVR, use Monado instead.",
+        xr_str(XR_NULL_HANDLE, r));
     return false;
+  }
 
   XrInstanceProperties props{XR_TYPE_INSTANCE_PROPERTIES};
   if (XR_SUCCEEDED(xrGetInstanceProperties(st.instance, &props))) {

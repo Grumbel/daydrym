@@ -1,9 +1,9 @@
 # TODO.md
 
 ## Current tip
-OpenXR on Linux: SteamVR via active_runtime.json fails under pure Nix (missing
-libuuid etc.). Workarounds: Monado (`XR_RUNTIME_JSON`) or FHS/`steam-run` /
-`nix run .#daydrym-steamvr -- --openxr`. Clearer loader error text in app.
+OpenXR + SteamVR: after FHS, xrCreateInstance may still fail (-2) if SteamVR
+is not running or active_runtime is not the official steamxr_linux64.json.
+App prints guidance; README documents start-SteamVR + symlink.
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
@@ -49,5 +49,5 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
 - Current tip: fix daydrym-steamvr let-binding (flake eval)
-- Bundle: daydrym-025.2-fix-steamvr-fhs-let-96e286e.bundle
-  (supersedes 025.1; full history from base)
+- Bundle: daydrym-025.3-openxr-createinstance-help-96e286e.bundle
+  (supersedes 025.2; full history from base)
