@@ -1,8 +1,8 @@
 # TODO.md
 
 ## Current tip
-daydrym-steamvr now wraps steam-run (full Steam FHS). Hand-rolled FHS was
-too thin; SteamVR still needs official steamxr_linux64.json + SteamVR running.
+OpenXR controller input: aim pose, teleport (select), thumbstick locomotion,
+menu day/night — same scene helpers as GVR.
 
 ## Done
 - [x] Minimal math (Vec3 / Mat4)
@@ -48,5 +48,5 @@ Controls: WASD move, mouse look, Space/Ctrl up/down, V stereo, Esc release mouse
 ## Bundle history
 - Base commit: 96e286e48440f72cfdfbb4f9077ced058b5dfdd5 (96e286e)
 - Current tip: fix daydrym-steamvr let-binding (flake eval)
-- Bundle: daydrym-025.4-steam-run-wrapper-96e286e.bundle
-  (supersedes 025.3; full history from base)
+- Bundle: daydrym-026.1-openxr-input-96e286e.bundle
+  (supersedes 025.4; full history from base)

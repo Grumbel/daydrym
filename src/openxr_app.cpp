@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,21 @@ struct Swapchain {
   std::vector<XrSwapchainImageOpenGLKHR> images;
 };
 
+enum { kHandLeft = 0, kHandRight = 1, kHandCount = 2 };
+
+struct HandInput {
+  bool aim_active = false;
+  Mat4 aim_model = Mat4::identity();
+  ControllerInput buttons{};
+  bool select_down = false;
+  bool select_clicked = false;  // edge this frame
+  float move_x = 0.f;
+  float move_y = 0.f;
+  bool floor_hit = false;
+  Vec3 floor_point{};
+  float ray_length = 4.f;
+};
+
 struct OpenXRState {
   XrInstance instance = XR_NULL_HANDLE;
   XrSystemId system_id = XR_NULL_SYSTEM_ID;
@@ -73,6 +89,22 @@ struct OpenXRState {
   int depth_h = 0;
 
   XrGraphicsBindingOpenGLXlibKHR graphics_binding{};
+
+  // Actions / controllers
+  XrActionSet action_set = XR_NULL_HANDLE;
+  XrAction aim_pose_action = XR_NULL_HANDLE;
+  XrAction select_action = XR_NULL_HANDLE;
+  XrAction menu_action = XR_NULL_HANDLE;
+  XrAction move_action = XR_NULL_HANDLE;
+  XrPath hand_path[kHandCount]{};
+  XrSpace aim_space[kHandCount]{XR_NULL_HANDLE, XR_NULL_HANDLE};
+  bool actions_attached = false;
+
+  // Play-space locomotion offset (stage/local), applied to views
+  Vec3 locomotion{0.f, 0.f, 0.f};
+  bool night = false;
+  bool menu_was_down = false;
+  HandInput hands[kHandCount]{};
 };
 
 bool fill_glx_binding(SDL_Window* window, XrGraphicsBindingOpenGLXlibKHR* out) {
@@ -227,6 +259,272 @@ bool create_instance(OpenXRState& st) {
                  XR_VERSION_PATCH(props.runtimeVersion));
   }
   return true;
+}
+
+
+bool create_actions(OpenXRState& st) {
+  XrActionSetCreateInfo asci{XR_TYPE_ACTION_SET_CREATE_INFO};
+  std::strncpy(asci.actionSetName, "gameplay", XR_MAX_ACTION_SET_NAME_SIZE - 1);
+  std::strncpy(asci.localizedActionSetName, "Gameplay", XR_MAX_LOCALIZED_ACTION_SET_NAME_SIZE - 1);
+  asci.priority = 0;
+  XrResult r = xrCreateActionSet(st.instance, &asci, &st.action_set);
+  if (!xr_check(st.instance, r, "xrCreateActionSet"))
+    return false;
+
+  xrStringToPath(st.instance, "/user/hand/left", &st.hand_path[kHandLeft]);
+  xrStringToPath(st.instance, "/user/hand/right", &st.hand_path[kHandRight]);
+  XrPath hands[2] = {st.hand_path[kHandLeft], st.hand_path[kHandRight]};
+
+  auto make_action = [&](const char* name, const char* localized, XrActionType type,
+                         XrAction* out) -> bool {
+    XrActionCreateInfo aci{XR_TYPE_ACTION_CREATE_INFO};
+    std::strncpy(aci.actionName, name, XR_MAX_ACTION_NAME_SIZE - 1);
+    std::strncpy(aci.localizedActionName, localized, XR_MAX_LOCALIZED_ACTION_NAME_SIZE - 1);
+    aci.actionType = type;
+    aci.countSubactionPaths = 2;
+    aci.subactionPaths = hands;
+    return xr_check(st.instance, xrCreateAction(st.action_set, &aci, out), name);
+  };
+
+  if (!make_action("aim_pose", "Aim Pose", XR_ACTION_TYPE_POSE_INPUT, &st.aim_pose_action))
+    return false;
+  if (!make_action("select", "Select", XR_ACTION_TYPE_BOOLEAN_INPUT, &st.select_action))
+    return false;
+  if (!make_action("menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT, &st.menu_action))
+    return false;
+  if (!make_action("move", "Move", XR_ACTION_TYPE_VECTOR2F_INPUT, &st.move_action))
+    return false;
+
+  for (int h = 0; h < kHandCount; ++h) {
+    XrActionSpaceCreateInfo spci{XR_TYPE_ACTION_SPACE_CREATE_INFO};
+    spci.action = st.aim_pose_action;
+    spci.subactionPath = st.hand_path[h];
+    spci.poseInActionSpace = {{0, 0, 0, 1}, {0, 0, 0}};
+    if (!xr_check(st.instance, xrCreateActionSpace(st.session, &spci, &st.aim_space[h]),
+                  "xrCreateActionSpace"))
+      return false;
+  }
+
+  struct Binding { XrAction action; const char* path; };
+  auto suggest = [&](const char* profile, std::initializer_list<Binding> binds) {
+    XrPath profile_path{};
+    if (XR_FAILED(xrStringToPath(st.instance, profile, &profile_path)))
+      return;
+    std::vector<XrActionSuggestedBinding> sb;
+    for (const Binding& b : binds) {
+      XrPath p{};
+      if (XR_FAILED(xrStringToPath(st.instance, b.path, &p)))
+        continue;
+      sb.push_back(XrActionSuggestedBinding{b.action, p});
+    }
+    if (sb.empty())
+      return;
+    XrInteractionProfileSuggestedBinding sug{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+    sug.interactionProfile = profile_path;
+    sug.countSuggestedBindings = static_cast<uint32_t>(sb.size());
+    sug.suggestedBindings = sb.data();
+    XrResult sr = xrSuggestInteractionProfileBindings(st.instance, &sug);
+    if (XR_FAILED(sr))
+      DAYDRYM_LOGI("OpenXR: bindings for %s not accepted (%s)", profile, xr_str(st.instance, sr));
+    else
+      DAYDRYM_LOGI("OpenXR: suggested bindings for %s", profile);
+  };
+
+  suggest("/interaction_profiles/khr/simple_controller", {
+      {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
+      {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.select_action, "/user/hand/left/input/select/click"},
+      {st.select_action, "/user/hand/right/input/select/click"},
+      {st.menu_action, "/user/hand/left/input/menu/click"},
+      {st.menu_action, "/user/hand/right/input/menu/click"},
+  });
+  suggest("/interaction_profiles/oculus/touch_controller", {
+      {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
+      {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.select_action, "/user/hand/left/input/x/click"},
+      {st.select_action, "/user/hand/right/input/a/click"},
+      {st.menu_action, "/user/hand/left/input/menu/click"},
+      {st.menu_action, "/user/hand/right/input/b/click"},
+      {st.move_action, "/user/hand/left/input/thumbstick"},
+      {st.move_action, "/user/hand/right/input/thumbstick"},
+  });
+  // Also map trigger as select via a second suggestion is not allowed per profile;
+  // use a/x for teleport (clear digital click). Thumbstick for locomotion.
+  suggest("/interaction_profiles/valve/index_controller", {
+      {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
+      {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.select_action, "/user/hand/left/input/trigger/click"},
+      {st.select_action, "/user/hand/right/input/trigger/click"},
+      {st.menu_action, "/user/hand/left/input/b/click"},
+      {st.menu_action, "/user/hand/right/input/b/click"},
+      {st.move_action, "/user/hand/left/input/thumbstick"},
+      {st.move_action, "/user/hand/right/input/thumbstick"},
+  });
+  suggest("/interaction_profiles/htc/vive_controller", {
+      {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
+      {st.aim_pose_action, "/user/hand/right/input/aim/pose"},
+      {st.select_action, "/user/hand/left/input/trigger/click"},
+      {st.select_action, "/user/hand/right/input/trigger/click"},
+      {st.menu_action, "/user/hand/left/input/menu/click"},
+      {st.menu_action, "/user/hand/right/input/menu/click"},
+      {st.move_action, "/user/hand/left/input/trackpad"},
+      {st.move_action, "/user/hand/right/input/trackpad"},
+  });
+
+  return true;
+}
+
+bool attach_actions(OpenXRState& st) {
+  if (st.actions_attached || st.action_set == XR_NULL_HANDLE)
+    return true;
+  XrSessionActionSetsAttachInfo ai{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
+  ai.countActionSets = 1;
+  ai.actionSets = &st.action_set;
+  if (!xr_check(st.instance, xrAttachSessionActionSets(st.session, &ai),
+                "xrAttachSessionActionSets"))
+    return false;
+  st.actions_attached = true;
+  DAYDRYM_LOGI("OpenXR action sets attached");
+  return true;
+}
+
+void update_hand_ray(HandInput& hand) {
+  hand.floor_hit = false;
+  hand.ray_length = 4.f;
+  if (!hand.aim_active)
+    return;
+  const Mat4& m = hand.aim_model;
+  Vec3 origin{m.m[12], m.m[13], m.m[14]};
+  // Column 2 of the rotation is local +Z; controller aims along -Z.
+  Vec3 dir{-m.m[8], -m.m[9], -m.m[10]};
+  dir = dir.normalized();
+  if (std::fabs(dir.y) < 1e-4f)
+    return;
+  const float t = -origin.y / dir.y;
+  if (t <= 0.05f || t > 12.f)
+    return;
+  hand.floor_point = {origin.x + dir.x * t, 0.f, origin.z + dir.z * t};
+  hand.floor_hit = true;
+  hand.ray_length = t;
+}
+
+void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
+                  const Mat4& head_view) {
+  if (!st.actions_attached || st.action_set == XR_NULL_HANDLE)
+    return;
+
+  XrActiveActionSet active{st.action_set, XR_NULL_PATH};
+  XrActionsSyncInfo sync{XR_TYPE_ACTIONS_SYNC_INFO};
+  sync.countActiveActionSets = 1;
+  sync.activeActionSets = &active;
+  if (XR_FAILED(xrSyncActions(st.session, &sync)))
+    return;
+
+  bool menu_down = false;
+  float move_x = 0.f, move_y = 0.f;
+
+  for (int h = 0; h < kHandCount; ++h) {
+    HandInput prev = st.hands[h];
+    HandInput& hand = st.hands[h];
+    hand = HandInput{};
+
+    XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
+    gi.subactionPath = st.hand_path[h];
+
+    // Aim
+    gi.action = st.aim_pose_action;
+    XrActionStatePose pose_st{XR_TYPE_ACTION_STATE_POSE};
+    if (XR_SUCCEEDED(xrGetActionStatePose(st.session, &gi, &pose_st)) && pose_st.isActive) {
+      XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+      if (XR_SUCCEEDED(xrLocateSpace(st.aim_space[h], st.ref_space, time, &loc))) {
+        const auto f = loc.locationFlags;
+        if ((f & XR_SPACE_LOCATION_POSITION_VALID_BIT) &&
+            (f & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
+          hand.aim_active = true;
+          const auto& p = loc.pose.position;
+          const auto& o = loc.pose.orientation;
+          hand.aim_model = Mat4::model_from_pose(p.x, p.y, p.z, o.x, o.y, o.z, o.w);
+        }
+      }
+    }
+
+    // Select
+    gi.action = st.select_action;
+    XrActionStateBoolean sel{XR_TYPE_ACTION_STATE_BOOLEAN};
+    if (XR_SUCCEEDED(xrGetActionStateBoolean(st.session, &gi, &sel)) && sel.isActive) {
+      hand.select_down = sel.currentState;
+      hand.buttons.trigger = sel.currentState;
+      hand.buttons.click = sel.currentState;
+      hand.select_clicked = sel.currentState && !prev.select_down;
+    }
+
+    // Menu
+    gi.action = st.menu_action;
+    XrActionStateBoolean menu{XR_TYPE_ACTION_STATE_BOOLEAN};
+    if (XR_SUCCEEDED(xrGetActionStateBoolean(st.session, &gi, &menu)) && menu.isActive) {
+      if (menu.currentState)
+        menu_down = true;
+      hand.buttons.app = menu.currentState;
+    }
+
+    // Move (thumbstick / trackpad)
+    gi.action = st.move_action;
+    XrActionStateVector2f mv{XR_TYPE_ACTION_STATE_VECTOR2F};
+    if (XR_SUCCEEDED(xrGetActionStateVector2f(st.session, &gi, &mv)) && mv.isActive) {
+      hand.move_x = mv.currentState.x;
+      hand.move_y = mv.currentState.y;
+      // Prefer the stick with larger magnitude
+      if (std::fabs(hand.move_x) + std::fabs(hand.move_y) >
+          std::fabs(move_x) + std::fabs(move_y)) {
+        move_x = hand.move_x;
+        move_y = hand.move_y;
+      }
+      hand.buttons.touching = (std::fabs(move_x) > 0.05f || std::fabs(move_y) > 0.05f);
+      hand.buttons.touch = {move_x * 0.5f + 0.5f, move_y * 0.5f + 0.5f};
+    }
+
+    update_hand_ray(hand);
+
+    // Teleport on select click when aiming at the floor
+    if (hand.select_clicked && hand.floor_hit) {
+      st.locomotion.x = hand.floor_point.x;
+      st.locomotion.z = hand.floor_point.z;
+      // Keep locomotion.y at 0 (floor); HMD height comes from tracking
+      DAYDRYM_LOGI("Teleport to (%.2f, %.2f)", st.locomotion.x, st.locomotion.z);
+    }
+  }
+
+  if (menu_down && !st.menu_was_down) {
+    st.night = !st.night;
+    scene.light.intensity = st.night ? 0.35f : 1.15f;
+    scene.light.ambient = st.night ? 0.10f : 0.28f;
+    DAYDRYM_LOGI("Menu: %s", st.night ? "night" : "day");
+  }
+  st.menu_was_down = menu_down;
+
+  // Smooth locomotion relative to head gaze on the floor plane
+  const float dead = 0.15f;
+  if (std::fabs(move_x) > dead || std::fabs(move_y) > dead) {
+    // head_view maps world->view; its inverse rotation columns give basis.
+    // Forward on floor: -Z of camera projected on XZ.
+    Vec3 fwd{-head_view.m[2], 0.f, -head_view.m[10]};
+    Vec3 right{head_view.m[0], 0.f, head_view.m[8]};
+    // head_view is world-to-view; rows/cols: easier use inverse of upper 3x3
+    // view_from_pose stores R^T in upper 3x3, so camera forward in world is
+    // -third row of R^T = - (m[2], m[6], m[10]) ... use look direction:
+    fwd = Vec3{-head_view.m[2], 0.f, -head_view.m[6]};
+    // Actually for column-major view matrix V = [R^T | -R^T t], the camera
+    // axes in world are rows of R^T (= columns of R):
+    // right = (m[0], m[4], m[8]), up = (m[1], m[5], m[9]), fwd = -(m[2], m[6], m[10])
+    right = Vec3{head_view.m[0], 0.f, head_view.m[8]};
+    fwd = Vec3{-head_view.m[2], 0.f, -head_view.m[10]};
+    right = right.normalized();
+    fwd = fwd.normalized();
+    const float speed = 3.0f * dt;
+    st.locomotion += fwd * (move_y * speed) + right * (move_x * speed);
+  }
+
+  (void)scene;
 }
 
 bool create_session(OpenXRState& st, SDL_Window* window) {
@@ -389,6 +687,16 @@ void destroy_openxr(OpenXRState& st) {
     sc.handle = XR_NULL_HANDLE;
   }
   st.swapchains.clear();
+  for (int h = 0; h < kHandCount; ++h) {
+    if (st.aim_space[h] != XR_NULL_HANDLE) {
+      xrDestroySpace(st.aim_space[h]);
+      st.aim_space[h] = XR_NULL_HANDLE;
+    }
+  }
+  if (st.action_set != XR_NULL_HANDLE) {
+    xrDestroyActionSet(st.action_set);
+    st.action_set = XR_NULL_HANDLE;
+  }
   if (st.ref_space != XR_NULL_HANDLE) {
     xrDestroySpace(st.ref_space);
     st.ref_space = XR_NULL_HANDLE;
@@ -422,8 +730,10 @@ void poll_events(OpenXRState& st) {
           case XR_SESSION_STATE_READY: {
             XrSessionBeginInfo bi{XR_TYPE_SESSION_BEGIN_INFO};
             bi.primaryViewConfigurationType = st.view_type;
-            if (xr_check(st.instance, xrBeginSession(st.session, &bi), "xrBeginSession"))
+            if (xr_check(st.instance, xrBeginSession(st.session, &bi), "xrBeginSession")) {
               st.session_running = true;
+              attach_actions(st);
+            }
             break;
           }
           case XR_SESSION_STATE_STOPPING:
@@ -493,6 +803,25 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
       }
     }
 
+    // Head view (left eye) for locomotion basis; include current locomotion so
+    // stick movement stays aligned with the played-offset avatar.
+    const XrPosef& hp = st.views[0].pose;
+    Mat4 head_view = Mat4::view_from_pose(
+        hp.position.x, hp.position.y, hp.position.z,
+        hp.orientation.x, hp.orientation.y, hp.orientation.z, hp.orientation.w);
+    head_view = head_view * Mat4::translate(
+        {-st.locomotion.x, -st.locomotion.y, -st.locomotion.z});
+
+    // dt is not in render_frame — use a small fixed step for stick speed; the
+    // main loop also advances scene time. Approximate via display period if set.
+    float dt = 1.f / 72.f;
+    if (frame_state.predictedDisplayPeriod > 0)
+      dt = static_cast<float>(frame_state.predictedDisplayPeriod) * 1e-9f;
+    if (dt < 0.001f || dt > 0.1f)
+      dt = 1.f / 72.f;
+
+    sync_actions(st, frame_state.predictedDisplayTime, dt, scene, head_view);
+
     // One shared shadow pass
     renderer.begin_shadow_pass(scene.light, {0.f, 1.f, -2.f});
     scene.draw_shadow(renderer);
@@ -527,17 +856,32 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
       glClearColor(0.45f, 0.65f, 0.95f, 1.f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-      renderer.setup_lit_pass(scene.light, head_pos);
+      renderer.setup_lit_pass(scene.light, {
+          head_pos.x + st.locomotion.x,
+          head_pos.y + st.locomotion.y,
+          head_pos.z + st.locomotion.z});
 
       const XrPosef& pose = st.views[i].pose;
       Mat4 view = Mat4::view_from_pose(
           pose.position.x, pose.position.y, pose.position.z,
           pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
+      // Locomotion: shift the world under the tracked HMD
+      view = view * Mat4::translate(
+          {-st.locomotion.x, -st.locomotion.y, -st.locomotion.z});
       const XrFovf& fov = st.views[i].fov;
       Mat4 proj = Mat4::perspective_fov(
           fov.angleLeft, fov.angleRight, fov.angleUp, fov.angleDown, 0.1f, 100.f);
 
       scene.draw(renderer, view, proj);
+      for (int h = 0; h < kHandCount; ++h) {
+        const HandInput& hand = st.hands[h];
+        if (!hand.aim_active)
+          continue;
+        scene.draw_controller(renderer, view, proj, hand.aim_model, hand.ray_length,
+                              hand.buttons);
+        if (hand.floor_hit)
+          scene.draw_marker(renderer, view, proj, hand.floor_point);
+      }
 
       glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -582,6 +926,10 @@ int run_openxr(SDL_Window* window, SDL_GLContext gl_ctx) {
     destroy_openxr(st);
     return 1;
   }
+  if (!create_actions(st)) {
+    destroy_openxr(st);
+    return 1;
+  }
   if (!create_swapchains(st)) {
     destroy_openxr(st);
     return 1;
@@ -599,7 +947,8 @@ int run_openxr(SDL_Window* window, SDL_GLContext gl_ctx) {
   Scene scene;
   // Place the scene relative to stage origin: house in front of user
   // Stage origin is typically floor center; keep default scene layout.
-  DAYDRYM_LOGI("OpenXR session ready — put on headset / start monado-service");
+  DAYDRYM_LOGI("OpenXR session ready");
+  DAYDRYM_LOGI("Controls: thumbstick/trackpad move, trigger/A select teleport, menu day/night");
   DAYDRYM_LOGI("Press Q or close window to quit");
 
   Uint64 prev = SDL_GetPerformanceCounter();

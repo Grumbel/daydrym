@@ -102,6 +102,16 @@ struct Mat4 {
     return v;
   }
 
+  // Model matrix from world-space pose (column-major OpenGL, local -Z forward).
+  static Mat4 model_from_pose(float px, float py, float pz,
+                              float qx, float qy, float qz, float qw) {
+    Mat4 m = from_quat(qx, qy, qz, qw);
+    m.m[12] = px;
+    m.m[13] = py;
+    m.m[14] = pz;
+    return m;
+  }
+
   static Mat4 ortho(float left, float right, float bottom, float top,
                     float znear, float zfar) {
     Mat4 r{};
