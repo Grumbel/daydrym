@@ -98,6 +98,7 @@ struct OpenXRState {
   XrAction menu_action = XR_NULL_HANDLE;
   XrAction move_action = XR_NULL_HANDLE;
   XrAction touch_action = XR_NULL_HANDLE;  // trackpad/thumbstick touch
+  XrAction pad_click_action = XR_NULL_HANDLE;  // trackpad click (snap turn)
   XrPath hand_path[kHandCount]{};
   XrSpace aim_space[kHandCount]{XR_NULL_HANDLE, XR_NULL_HANDLE};
   XrSpace grip_space[kHandCount]{XR_NULL_HANDLE, XR_NULL_HANDLE};
@@ -105,8 +106,10 @@ struct OpenXRState {
 
   // Play-space locomotion offset (stage/local), applied to views
   Vec3 locomotion{0.f, 0.f, 0.f};
+  float player_yaw = 0.f;  // radians; snap turns accumulate here
   bool night = false;
   bool menu_was_down = false;
+  bool pad_click_was_down[kHandCount]{false, false};
   HandInput hands[kHandCount]{};
 };
 
@@ -301,6 +304,8 @@ bool create_actions(OpenXRState& st) {
     return false;
   if (!make_action("touch", "Touch", XR_ACTION_TYPE_BOOLEAN_INPUT, &st.touch_action))
     return false;
+  if (!make_action("pad_click", "Pad Click", XR_ACTION_TYPE_BOOLEAN_INPUT, &st.pad_click_action))
+    return false;
   // Action spaces created in attach_actions after xrBeginSession + attach.
 
   struct Binding { XrAction action; const char* path; };
@@ -351,6 +356,8 @@ bool create_actions(OpenXRState& st) {
       {st.move_action, "/user/hand/right/input/thumbstick"},
       {st.touch_action, "/user/hand/left/input/thumbstick/touch"},
       {st.touch_action, "/user/hand/right/input/thumbstick/touch"},
+      {st.pad_click_action, "/user/hand/left/input/thumbstick/click"},
+      {st.pad_click_action, "/user/hand/right/input/thumbstick/click"},
   });
   // Also map trigger as select via a second suggestion is not allowed per profile;
   // use a/x for teleport (clear digital click). Thumbstick for locomotion.
@@ -367,6 +374,8 @@ bool create_actions(OpenXRState& st) {
       {st.move_action, "/user/hand/right/input/thumbstick"},
       {st.touch_action, "/user/hand/left/input/thumbstick/touch"},
       {st.touch_action, "/user/hand/right/input/thumbstick/touch"},
+      {st.pad_click_action, "/user/hand/left/input/thumbstick/click"},
+      {st.pad_click_action, "/user/hand/right/input/thumbstick/click"},
   });
   suggest("/interaction_profiles/htc/vive_controller", {
       {st.aim_pose_action, "/user/hand/left/input/aim/pose"},
@@ -381,6 +390,8 @@ bool create_actions(OpenXRState& st) {
       {st.move_action, "/user/hand/right/input/trackpad"},
       {st.touch_action, "/user/hand/left/input/trackpad/touch"},
       {st.touch_action, "/user/hand/right/input/trackpad/touch"},
+      {st.pad_click_action, "/user/hand/left/input/trackpad/click"},
+      {st.pad_click_action, "/user/hand/right/input/trackpad/click"},
   });
 
   return true;
@@ -483,6 +494,7 @@ void log_input_diagnostics(OpenXRState& st) {
   log_bound_sources(st, st.menu_action, "menu");
   log_bound_sources(st, st.move_action, "move");
   log_bound_sources(st, st.touch_action, "touch");
+  log_bound_sources(st, st.pad_click_action, "pad_click");
 }
 
 void update_hand_ray(HandInput& hand) {
@@ -659,6 +671,34 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
 
     update_hand_ray(hand);
 
+    // Trackpad/stick click on left/right half → 45° snap turn
+    gi.action = st.pad_click_action;
+    XrActionStateBoolean pad_clk{XR_TYPE_ACTION_STATE_BOOLEAN};
+    bool pad_down = false;
+    if (XR_SUCCEEDED(xrGetActionStateBoolean(st.session, &gi, &pad_clk)) &&
+        pad_clk.isActive && pad_clk.currentState)
+      pad_down = true;
+    if (pad_down && !st.pad_click_was_down[h]) {
+      float px = hand.move_x;
+      // Click can happen with touch released; re-read pad axes for left/right.
+      gi.action = st.move_action;
+      XrActionStateVector2f mv_click{XR_TYPE_ACTION_STATE_VECTOR2F};
+      if (XR_SUCCEEDED(xrGetActionStateVector2f(st.session, &gi, &mv_click)) &&
+          mv_click.isActive) {
+        px = mv_click.currentState.x;
+      }
+      constexpr float kSnap = 45.f * 3.14159265f / 180.f;
+      constexpr float kEdge = 0.35f;
+      if (px <= -kEdge) {
+        st.player_yaw += kSnap;  // turn left
+        DAYDRYM_LOGI("Snap turn left (yaw=%.0f deg)", st.player_yaw * 180.f / 3.14159265f);
+      } else if (px >= kEdge) {
+        st.player_yaw -= kSnap;  // turn right
+        DAYDRYM_LOGI("Snap turn right (yaw=%.0f deg)", st.player_yaw * 180.f / 3.14159265f);
+      }
+    }
+    st.pad_click_was_down[h] = pad_down;
+
     // Teleport on select click when aiming at the floor
     if (hand.select_clicked && hand.floor_hit) {
       st.locomotion.x = hand.floor_point.x;
@@ -694,10 +734,16 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
     fwd = Vec3{-head_view.m[2], 0.f, -head_view.m[10]};
     right = right.normalized();
     fwd = fwd.normalized();
+    // Apply current snap-turn yaw so stick moves in the virtual facing frame.
+    {
+      const float c = std::cos(st.player_yaw);
+      const float s = std::sin(st.player_yaw);
+      const Vec3 fwd_y{fwd.x * c + fwd.z * s, 0.f, -fwd.x * s + fwd.z * c};
+      const Vec3 right_y{right.x * c + right.z * s, 0.f, -right.x * s + right.z * c};
+      fwd = fwd_y;
+      right = right_y;
+    }
     const float speed = 3.0f * dt;
-    // OpenXR trackpad +Y is toward the ring (away from user); SteamVR/ALVE
-    // reports the opposite of what we want for head-relative walk, so use +Y
-    // on the pad as world-forward without an extra negate.
     st.locomotion += fwd * (move_y * speed) + right * (move_x * speed);
   }
 
@@ -1051,8 +1097,16 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
       Mat4 view_tracked = Mat4::view_from_pose(
           pose.position.x, pose.position.y, pose.position.z,
           pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
-      Mat4 view_scene = view_tracked * Mat4::translate(
-          {-st.locomotion.x, -st.locomotion.y, -st.locomotion.z});
+      // Locomotion translate then yaw around the head's floor position so snap
+      // turns pivot on the player, not the stage origin.
+      const float hx = pose.position.x;
+      const float hz = pose.position.z;
+      Mat4 view_scene =
+          view_tracked *
+          Mat4::translate({hx, 0.f, hz}) *
+          Mat4::rotate_y(-st.player_yaw) *
+          Mat4::translate({-hx, 0.f, -hz}) *
+          Mat4::translate({-st.locomotion.x, -st.locomotion.y, -st.locomotion.z});
 
       // Light / specular relative to the tracked head in scene space
       renderer.setup_lit_pass(scene.light, {
@@ -1142,7 +1196,7 @@ int run_openxr(SDL_Window* window, SDL_GLContext gl_ctx) {
   // Place the scene relative to stage origin: house in front of user
   // Stage origin is typically floor center; keep default scene layout.
   DAYDRYM_LOGI("OpenXR session ready");
-  DAYDRYM_LOGI("Controls: thumbstick/trackpad move, trigger/A select teleport, menu day/night");
+  DAYDRYM_LOGI("Controls: pad move, pad click L/R snap 45°, trigger teleport, menu day/night");
   DAYDRYM_LOGI("Press Q or close window to quit");
 
   Uint64 prev = SDL_GetPerformanceCounter();
