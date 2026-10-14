@@ -961,14 +961,11 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
       }
     }
 
-    // Head view (left eye) for locomotion basis; include current locomotion so
-    // stick movement stays aligned with the played-offset avatar.
+    // Head view (left eye) for thumbstick basis — pure tracking, no locomotion.
     const XrPosef& hp = st.views[0].pose;
     Mat4 head_view = Mat4::view_from_pose(
         hp.position.x, hp.position.y, hp.position.z,
         hp.orientation.x, hp.orientation.y, hp.orientation.z, hp.orientation.w);
-    head_view = head_view * Mat4::translate(
-        {-st.locomotion.x, -st.locomotion.y, -st.locomotion.z});
 
     // dt is not in render_frame — use a small fixed step for stick speed; the
     // main loop also advances scene time. Approximate via display period if set.
@@ -1014,31 +1011,37 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
       glClearColor(0.45f, 0.65f, 0.95f, 1.f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+      // Tracked view matches the pose we submit to the compositor (hands stay on
+      // the physical controllers). Locomotion is applied only to scene content so
+      // the world slides under the player without dragging the controllers away.
+      const XrPosef& pose = st.views[i].pose;
+      Mat4 view_tracked = Mat4::view_from_pose(
+          pose.position.x, pose.position.y, pose.position.z,
+          pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
+      Mat4 view_scene = view_tracked * Mat4::translate(
+          {-st.locomotion.x, -st.locomotion.y, -st.locomotion.z});
+
+      // Light / specular relative to the tracked head in scene space
       renderer.setup_lit_pass(scene.light, {
           head_pos.x + st.locomotion.x,
           head_pos.y + st.locomotion.y,
           head_pos.z + st.locomotion.z});
 
-      const XrPosef& pose = st.views[i].pose;
-      Mat4 view = Mat4::view_from_pose(
-          pose.position.x, pose.position.y, pose.position.z,
-          pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w);
-      // Locomotion: shift the world under the tracked HMD
-      view = view * Mat4::translate(
-          {-st.locomotion.x, -st.locomotion.y, -st.locomotion.z});
       const XrFovf& fov = st.views[i].fov;
       Mat4 proj = Mat4::perspective_fov(
           fov.angleLeft, fov.angleRight, fov.angleUp, fov.angleDown, 0.1f, 100.f);
 
-      scene.draw(renderer, view, proj);
+      scene.draw(renderer, view_scene, proj);
       for (int h = 0; h < kHandCount; ++h) {
         const HandInput& hand = st.hands[h];
         if (!hand.aim_active)
           continue;
-        scene.draw_controller(renderer, view, proj, hand.aim_model, hand.ray_length,
-                              hand.buttons);
+        // Controllers + laser: tracked view (physical hand position)
+        scene.draw_controller(renderer, view_tracked, proj, hand.aim_model,
+                              hand.ray_length, hand.buttons);
+        // Floor marker lives in scene/world space (same as teleport target)
         if (hand.floor_hit)
-          scene.draw_marker(renderer, view, proj, hand.floor_point);
+          scene.draw_marker(renderer, view_scene, proj, hand.floor_point);
       }
 
       glBindFramebuffer(GL_FRAMEBUFFER, 0);
