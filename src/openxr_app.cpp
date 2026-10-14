@@ -388,6 +388,70 @@ bool attach_actions(OpenXRState& st) {
   return true;
 }
 
+std::string path_str(XrInstance inst, XrPath path) {
+  if (path == XR_NULL_PATH)
+    return "(null)";
+  char buf[XR_MAX_PATH_LENGTH];
+  uint32_t len = 0;
+  if (XR_FAILED(xrPathToString(inst, path, sizeof(buf), &len, buf)) || len == 0)
+    return "(unresolved)";
+  return std::string(buf);
+}
+
+void log_interaction_profiles(OpenXRState& st, const char* reason) {
+  if (st.session == XR_NULL_HANDLE)
+    return;
+  DAYDRYM_LOGI("OpenXR interaction profiles (%s):", reason);
+  static const char* user_paths[] = {
+      "/user/hand/left",
+      "/user/hand/right",
+      "/user/head",
+      "/user/gamepad",
+      "/user/treadmill",
+  };
+  for (const char* up : user_paths) {
+    XrPath user{};
+    if (XR_FAILED(xrStringToPath(st.instance, up, &user)))
+      continue;
+    XrInteractionProfileState ips{XR_TYPE_INTERACTION_PROFILE_STATE};
+    XrResult r = xrGetCurrentInteractionProfile(st.session, user, &ips);
+    if (XR_FAILED(r)) {
+      DAYDRYM_LOGI("  %s: query failed (%s)", up, xr_str(st.instance, r));
+      continue;
+    }
+    DAYDRYM_LOGI("  %s -> %s", up, path_str(st.instance, ips.interactionProfile).c_str());
+  }
+}
+
+void log_bound_sources(OpenXRState& st, XrAction action, const char* action_name) {
+  if (action == XR_NULL_HANDLE)
+    return;
+  uint32_t count = 0;
+  XrBoundSourcesForActionEnumerateInfo info{XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO};
+  info.action = action;
+  if (XR_FAILED(xrEnumerateBoundSourcesForAction(st.session, &info, 0, &count, nullptr)))
+    return;
+  if (count == 0) {
+    DAYDRYM_LOGI("  action '%s': (no bound sources)", action_name);
+    return;
+  }
+  std::vector<XrPath> sources(count);
+  if (XR_FAILED(xrEnumerateBoundSourcesForAction(st.session, &info, count, &count, sources.data())))
+    return;
+  DAYDRYM_LOGI("  action '%s' bound sources (%u):", action_name, count);
+  for (uint32_t i = 0; i < count; ++i)
+    DAYDRYM_LOGI("    - %s", path_str(st.instance, sources[i]).c_str());
+}
+
+void log_input_diagnostics(OpenXRState& st) {
+  log_interaction_profiles(st, "diagnostics");
+  DAYDRYM_LOGI("OpenXR action bindings currently active:");
+  log_bound_sources(st, st.aim_pose_action, "aim_pose");
+  log_bound_sources(st, st.select_action, "select");
+  log_bound_sources(st, st.menu_action, "menu");
+  log_bound_sources(st, st.move_action, "move");
+}
+
 void update_hand_ray(HandInput& hand) {
   hand.floor_hit = false;
   hand.ray_length = 4.f;
@@ -419,6 +483,42 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
   sync.activeActionSets = &active;
   if (XR_FAILED(xrSyncActions(st.session, &sync)))
     return;
+
+  // Periodic action-state dump (every ~2s) so SteamVR/ALVR binding gaps are visible
+  static double accum = 0.0;
+  accum += dt;
+  if (accum >= 2.0) {
+    accum = 0.0;
+    DAYDRYM_LOGI("OpenXR action states:");
+    for (int h = 0; h < kHandCount; ++h) {
+      const char* hand = (h == kHandLeft) ? "left" : "right";
+      XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
+      gi.subactionPath = st.hand_path[h];
+
+      gi.action = st.aim_pose_action;
+      XrActionStatePose pose{XR_TYPE_ACTION_STATE_POSE};
+      bool pose_ok = XR_SUCCEEDED(xrGetActionStatePose(st.session, &gi, &pose));
+      gi.action = st.select_action;
+      XrActionStateBoolean sel{XR_TYPE_ACTION_STATE_BOOLEAN};
+      bool sel_ok = XR_SUCCEEDED(xrGetActionStateBoolean(st.session, &gi, &sel));
+      gi.action = st.menu_action;
+      XrActionStateBoolean menu{XR_TYPE_ACTION_STATE_BOOLEAN};
+      bool menu_ok = XR_SUCCEEDED(xrGetActionStateBoolean(st.session, &gi, &menu));
+      gi.action = st.move_action;
+      XrActionStateVector2f mv{XR_TYPE_ACTION_STATE_VECTOR2F};
+      bool mv_ok = XR_SUCCEEDED(xrGetActionStateVector2f(st.session, &gi, &mv));
+
+      DAYDRYM_LOGI(
+          "  %s: pose_active=%d select_active=%d/%d menu_active=%d/%d move_active=%d (%.2f,%.2f)",
+          hand,
+          pose_ok && pose.isActive,
+          sel_ok && sel.isActive, sel_ok ? (int)sel.currentState : 0,
+          menu_ok && menu.isActive, menu_ok ? (int)menu.currentState : 0,
+          mv_ok && mv.isActive,
+          (mv_ok && mv.isActive) ? mv.currentState.x : 0.f,
+          (mv_ok && mv.isActive) ? mv.currentState.y : 0.f);
+    }
+  }
 
   bool menu_down = false;
   float move_x = 0.f, move_y = 0.f;
@@ -733,9 +833,14 @@ void poll_events(OpenXRState& st) {
             if (xr_check(st.instance, xrBeginSession(st.session, &bi), "xrBeginSession")) {
               st.session_running = true;
               attach_actions(st);
+              // Profiles often still null until FOCUSED; dump anyway.
+              log_input_diagnostics(st);
             }
             break;
           }
+          case XR_SESSION_STATE_FOCUSED:
+            log_input_diagnostics(st);
+            break;
           case XR_SESSION_STATE_STOPPING:
             xrEndSession(st.session);
             st.session_running = false;
@@ -747,6 +852,11 @@ void poll_events(OpenXRState& st) {
           default:
             break;
         }
+        break;
+      }
+      case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED: {
+        DAYDRYM_LOGI("OpenXR: interaction profile changed");
+        log_input_diagnostics(st);
         break;
       }
       case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
