@@ -518,7 +518,7 @@ void update_hand_ray(HandInput& hand) {
 }
 
 void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
-                  const Mat4& head_view) {
+                  const Mat4& head_view, const Vec3& head_pos) {
   if (!st.actions_attached || st.action_set == XR_NULL_HANDLE)
     return;
 
@@ -701,10 +701,11 @@ void sync_actions(OpenXRState& st, XrTime time, float dt, Scene& scene,
 
     // Teleport on select click when aiming at the floor
     if (hand.select_clicked && hand.floor_hit) {
-      st.locomotion.x = hand.floor_point.x;
-      st.locomotion.z = hand.floor_point.z;
-      // Keep locomotion.y at 0 (floor); HMD height comes from tracking
-      DAYDRYM_LOGI("Teleport to (%.2f, %.2f)", st.locomotion.x, st.locomotion.z);
+      // T(-loco) * floor_point ≈ head on XZ so we stand on the target.
+      st.locomotion.x = hand.floor_point.x - head_pos.x;
+      st.locomotion.z = hand.floor_point.z - head_pos.z;
+      st.locomotion.y = 0.f;
+      DAYDRYM_LOGI("Teleport to (%.2f, %.2f)", hand.floor_point.x, hand.floor_point.z);
     }
   }
 
@@ -1054,7 +1055,7 @@ bool render_frame(OpenXRState& st, Renderer& renderer, Scene& scene) {
     if (dt < 0.001f || dt > 0.1f)
       dt = 1.f / 72.f;
 
-    sync_actions(st, frame_state.predictedDisplayTime, dt, scene, head_view);
+    sync_actions(st, frame_state.predictedDisplayTime, dt, scene, head_view, head_pos);
 
     // One shared shadow pass
     renderer.begin_shadow_pass(scene.light, {0.f, 1.f, -2.f});
